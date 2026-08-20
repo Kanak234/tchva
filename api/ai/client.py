@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+import httpx
 
 # google-genai is optional at test time — validate_advisory and extract_numbers
 # are pure functions and must be importable without the SDK.
@@ -27,6 +28,44 @@ except ImportError:
     _GENAI_AVAILABLE = False
 
 logger = logging.getLogger("fasal_kavach.ai")
+
+# ---------------------------------------------------------------------------
+# Ollama and Local LLM fallback settings
+# ---------------------------------------------------------------------------
+OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2")
+USE_OLLAMA = os.getenv("USE_OLLAMA", "false").lower() == "true"
+
+
+def should_use_ollama() -> bool:
+    if USE_OLLAMA:
+        return True
+    # If Gemini API key is missing, default to Ollama fallback
+    api_key = os.getenv("GEMINI_API_KEY", "")
+    if not api_key:
+        return True
+    return False
+
+
+async def call_ollama(system_instruction: str, prompt: str, format_json: bool) -> str:
+    url = f"{OLLAMA_BASE_URL.rstrip('/')}/api/chat"
+    payload = {
+        "model": OLLAMA_MODEL,
+        "messages": [
+            {"role": "system", "content": system_instruction},
+            {"role": "user", "content": prompt}
+        ],
+        "stream": False
+    }
+    if format_json:
+        payload["format"] = "json"
+        
+    async with httpx.AsyncClient(timeout=60.0) as client:
+        response = await client.post(url, json=payload)
+        response.raise_for_status()
+        data = response.json()
+        return data["message"]["content"]
+
 
 # ---------------------------------------------------------------------------
 # Client setup
@@ -133,7 +172,7 @@ async def generate_advisory(
     event: dict, language: str
 ) -> dict | None:
     """
-    Generate a structured advisory from a RiskEvent using Gemini.
+    Generate a structured advisory from a RiskEvent using Gemini or Ollama.
 
     Returns the advisory dict on success, None on failure (caller falls
     back to template).
@@ -143,6 +182,24 @@ async def generate_advisory(
     context_block = build_context_block(event)
 
     try:
+        if should_use_ollama():
+            logger.info(f"Generating advisory using local Ollama model {OLLAMA_MODEL}")
+            text = await call_ollama(system_instruction, context_block, format_json=True)
+            result = json.loads(text)
+            if not validate_advisory(result, event):
+                logger.warning("Ollama advisory failed validation, retrying once")
+                text2 = await call_ollama(
+                    system_instruction,
+                    context_block + "\n\nIMPORTANT: Use ONLY numbers from the context. Do NOT add any number not listed above.",
+                    format_json=True
+                )
+                result2 = json.loads(text2)
+                if validate_advisory(result2, event):
+                    return result2
+                logger.warning("Ollama advisory failed validation on retry, falling back to template")
+                return None
+            return result
+
         client = get_client()
         response = client.models.generate_content(
             model=MODEL,
@@ -347,20 +404,24 @@ async def ask_question(
             used_context.append(f"advisory_{adv.get('event_id', '')}")
 
     try:
-        client = get_client()
-        response = client.models.generate_content(
-            model=MODEL,
-            contents=[f"Question: {question}\n\n{context_block}"],
-            config=types.GenerateContentConfig(
-                system_instruction=system_instruction,
-                response_mime_type="application/json",
-                response_schema=ASK_SCHEMA,
-                temperature=0.3,
-                max_output_tokens=512,
-            ),
-        )
-
-        text = response.text
+        if should_use_ollama():
+            logger.info(f"Answering question using local Ollama model {OLLAMA_MODEL}")
+            prompt = f"Question: {question}\n\n{context_block}"
+            text = await call_ollama(system_instruction, prompt, format_json=True)
+        else:
+            client = get_client()
+            response = client.models.generate_content(
+                model=MODEL,
+                contents=[f"Question: {question}\n\n{context_block}"],
+                config=types.GenerateContentConfig(
+                    system_instruction=system_instruction,
+                    response_mime_type="application/json",
+                    response_schema=ASK_SCHEMA,
+                    temperature=0.3,
+                    max_output_tokens=512,
+                ),
+            )
+            text = response.text
         if not text:
             return _ungrounded_response(language)
 
