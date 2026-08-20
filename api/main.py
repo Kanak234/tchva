@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI):
                     
                     async def run_initial_ingest(farms_data):
                         try:
-                            from db import store_event, store_advisory, store_weather
+                            from db import save_event, save_advisory, save_weather
                             result = await run_pipeline(
                                 farms=farms_data,
                                 grid_cells=GRID_CELLS,
@@ -124,11 +124,11 @@ async def lifespan(app: FastAPI):
                                 crop_calendar=app.state.crop_calendar,
                             )
                             for event in result.get("events", []):
-                                await store_event(event)
+                                await save_event(event)
                             for advisory in result.get("advisories", []):
-                                await store_advisory(advisory)
+                                await save_advisory(advisory)
                             for key, weather in result.get("weather", {}).items():
-                                await store_weather(key, weather)
+                                await save_weather(key, weather)
                             logger.info(
                                 json.dumps(
                                     {
