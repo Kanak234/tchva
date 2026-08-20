@@ -428,7 +428,7 @@ async def ask_question(
                     response_mime_type="application/json",
                     response_schema=ASK_SCHEMA,
                     temperature=0.3,
-                    max_output_tokens=512,
+                    max_output_tokens=4096,
                 ),
             )
             text = response.text
