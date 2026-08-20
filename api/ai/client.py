@@ -116,8 +116,6 @@ ADVISORY_SCHEMA = {
         "body": {"type": "string"},
         "actions": {
             "type": "array",
-            "minItems": 3,
-            "maxItems": 3,
             "items": {"type": "string"},
         },
         "spoken_script": {"type": "string"},
@@ -206,6 +204,8 @@ async def generate_advisory(
             return result
 
         client = get_client()
+        thinking_cfg = types.ThinkingConfig(thinking_budget=0) if (types and hasattr(types, "ThinkingConfig")) else None
+
         response = client.models.generate_content(
             model=MODEL,
             contents=[context_block],
@@ -215,10 +215,19 @@ async def generate_advisory(
                 response_schema=ADVISORY_SCHEMA,
                 temperature=0.2,
                 max_output_tokens=8192,
+                thinking_config=thinking_cfg,
             ),
         )
 
         text = response.text
+        finish_reason = (
+            response.candidates[0].finish_reason
+            if (response.candidates and len(response.candidates) > 0)
+            else "NO_CANDIDATES"
+        )
+        logger.error(f"RAW GEMINI RESPONSE: {text!r}")
+        logger.error(f"FINISH REASON: {finish_reason}")
+
         if not text:
             logger.warning("Gemini returned empty text for advisory")
             return None
@@ -242,9 +251,18 @@ async def generate_advisory(
                     response_schema=ADVISORY_SCHEMA,
                     temperature=0.1,
                     max_output_tokens=8192,
+                    thinking_config=thinking_cfg,
                 ),
             )
             text2 = response2.text
+            finish_reason2 = (
+                response2.candidates[0].finish_reason
+                if (response2.candidates and len(response2.candidates) > 0)
+                else "NO_CANDIDATES"
+            )
+            logger.error(f"RAW GEMINI RETRY RESPONSE: {text2!r}")
+            logger.error(f"RETRY FINISH REASON: {finish_reason2}")
+
             if text2:
                 result2 = json.loads(text2)
                 if validate_advisory(result2, event):
