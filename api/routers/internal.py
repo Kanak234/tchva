@@ -144,10 +144,12 @@ async def status():
     Check this before demoing. If it says "memory", Firestore credentials
     did not resolve and your data will vanish on restart.
     """
+    from ai.client import get_ai_backend
     return {
         "backend": db.backend_name(),
         "persistent": db.backend_name() == "firestore",
         "farms_stored": await db.count_farms(),
         "demo_mode": os.getenv("DEMO_MODE", "false").lower() == "true",
         "seed_file_found": SEED_PATH.exists(),
+        "ai_backend": get_ai_backend(),
     }

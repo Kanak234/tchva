@@ -21,6 +21,4 @@ RUN test -f /app/data/seed/demo_farms.json \
     && test -f /app/data/crop_calendar.csv \
     && echo "data files present"
 
-EXPOSE 8080
-
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--workers", "1"]
+CMD ["sh", "-c", "uvicorn main:app --host 0.0.0.0 --port ${PORT:-8080}"]

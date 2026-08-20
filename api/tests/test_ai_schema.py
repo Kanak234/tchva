@@ -6,10 +6,19 @@ Tests the post-generation validation gates.
 
 import os
 import sys
+from unittest.mock import patch
+
+import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from ai.client import extract_numbers, validate_advisory
+from ai.client import (
+    ask_question,
+    extract_numbers,
+    generate_advisory,
+    get_ai_backend,
+    validate_advisory,
+)
 
 
 class TestValidateAdvisory:
@@ -87,3 +96,34 @@ class TestExtractNumbers:
 
     def test_negative(self):
         assert -2 in extract_numbers("Temperature will drop to -2 degrees")
+
+
+class TestAIBackendLadder:
+    def test_get_ai_backend_ollama(self):
+        with patch("ai.client.USE_OLLAMA", True):
+            assert get_ai_backend() == "ollama"
+
+    def test_get_ai_backend_gemini(self):
+        with patch("ai.client.USE_OLLAMA", False), \
+             patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+            assert get_ai_backend() == "gemini"
+
+    def test_get_ai_backend_template(self):
+        with patch("ai.client.USE_OLLAMA", False), \
+             patch.dict(os.environ, {}):
+            if "GEMINI_API_KEY" in os.environ:
+                del os.environ["GEMINI_API_KEY"]
+            assert get_ai_backend() == "template"
+
+    @pytest.mark.asyncio
+    async def test_generate_advisory_template_fallback(self):
+        with patch("ai.client.get_ai_backend", return_value="template"):
+            result = await generate_advisory({"evidence": {}}, "en")
+            assert result is None
+
+    @pytest.mark.asyncio
+    async def test_ask_question_template_fallback(self):
+        with patch("ai.client.get_ai_backend", return_value="template"):
+            result = await ask_question("any question", "en", {})
+            assert result["grounded"] is False
+            assert "I do not have that information" in result["answer_text"]

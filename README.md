@@ -18,6 +18,25 @@ a risk. Gemini only phrases it. The AI cannot invent a warning.
 
 ---
 
+## Three modes
+
+Fasal Kavach operates in one of three modes depending on your configuration:
+
+* **Cloud Mode (Gemini via Render / Cloud Run)**:
+  - **Data**: Real-time live weather data from Open-Meteo, evaluated against deterministic agronomic rules.
+  - **AI Backend**: Google Gemini 2.5 Flash via google-genai SDK.
+  - **Storage**: In-memory (on Render) or persistent (with Firestore).
+* **Local Mode (Ollama on Laptop)**:
+  - **Data**: Real-time live weather data, evaluated against deterministic agronomic rules.
+  - **AI Backend**: Local Ollama server (`USE_OLLAMA=true`) running Gemma2 or another local LLM for offline AI execution.
+  - **Storage**: In-memory or Firestore.
+* **Demo Mode (In-browser Mock)**:
+  - **Data**: **Simulated static data** returned by the client fallback.
+  - **AI Backend**: None (mocked local advisories).
+  - **UI Indicator**: Explicitly labeled at the top of every screen with an amber warning banner: *Demo data — backend not connected*.
+
+---
+
 ## Quick start (under 10 minutes)
 
 ```bash
@@ -121,14 +140,14 @@ real farmers in it.
 ## Architecture
 
 ```
-Next.js PWA → FastAPI (Cloud Run) → Gemini API / Local Ollama (Gemma2)
-                ↓                                 ↑
-           Rules Engine                    (advisory only)
-           (deterministic)
-                ↓
-           Firestore ← Ingest Worker (Cloud Scheduler)
-                            ↓
-                       Open-Meteo
+                       ┌─── (Backend Connected) ───► FastAPI (Render / Cloud Run)
+                       │                              ├─── AI: Gemini API (Cloud)
+                       │                              ├─── AI: Local Ollama (Laptop)
+                       │                              └─── Database: Firestore / In-memory
+Next.js PWA ───────────┤
+                       │
+                       └─── (Backend Offline) ─────► In-browser Mock Fallback (Demo Mode)
+                                                      └─── Warning Banner Active
 ```
 
 **Rules decide. AI communicates.**
@@ -150,7 +169,7 @@ Next.js PWA → FastAPI (Cloud Run) → Gemini API / Local Ollama (Gemma2)
 
 ## Demo path (Section 5.1)
 
-1. Open the public URL
+1. Open the public URL (Note: If the backend is not yet deployed or is offline, the app will show a prominent amber warning banner indicating simulated demo mode).
 2. Log in (or use Demo Farm shortcut)  
 3. Create a farm: crop = paddy, sowing = 15 July, area = 1.2 ha
 4. See a live alert generated from real forecast data
@@ -183,6 +202,8 @@ NEXT_PUBLIC_FIREBASE_*=...  (from Firebase console)
 ```
 
 **Never commit `.env` or any key file.**
+
+*Note: During production deployment, replace `NEXT_PUBLIC_API_BASE=RENDER_URL_HERE` in `web/.env.production` with your actual Render backend URL before running `npm run build` and `firebase deploy`.*
 
 ---
 
@@ -243,10 +264,11 @@ See `data/README.md` for source, licence, and transformation notes for every dat
 ## Honest claims
 
 - Working end-to-end prototype for **one district, four crops**
-- **Seeded with real weather data** from Open-Meteo
+- **Seeded with real weather data** from Open-Meteo (when backend is connected)
 - Rules engine is **fully unit-tested** with boundary conditions
 - Gemini output is **validated** — number containment check, no pesticide names
-- **Graceful degradation**: template fallbacks when AI is unavailable
+- **Graceful degradation**: template fallbacks when AI is unavailable, and automatic transparent transition to in-browser demo/mock fallback with a visible UI warning banner when the backend is disconnected
+- **Transparency**: In-browser demo mode uses simulated data and does not run the backend rules engine, which is honestly declared to the user via the top warning banner.
 - Not claiming: nationwide scale, field-validated agronomy, ML model training
 
 ---

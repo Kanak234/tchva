@@ -42,7 +42,7 @@ def cache_key(
     # Find the driving number (first numeric value in evidence)
     driving_number = 0.0
     for v in evidence.values():
-        if isinstance(v, (int, float)):
+        if isinstance(v, int | float):
             driving_number = float(v)
             break
 

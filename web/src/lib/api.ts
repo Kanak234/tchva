@@ -254,27 +254,27 @@ function handleMockRequest(path: string, init?: RequestInit): any {
 }
 
 // ---------------------------------------------------------------------------
-// Backend Status / Mock Warning State
+// Mock Mode / Connection Warning State
 // ---------------------------------------------------------------------------
-let backendDisconnected = false;
-let statusListeners: ((disconnected: boolean) => void)[] = [];
+let isMockMode = false;
+let mockModeListeners: ((active: boolean) => void)[] = [];
 
-export function isBackendDisconnected() {
-  return backendDisconnected;
+export function getIsMockMode() {
+  return isMockMode;
 }
 
-export function subscribeToBackendStatus(listener: (disconnected: boolean) => void) {
-  statusListeners.push(listener);
-  listener(backendDisconnected);
+export function subscribeToMockMode(listener: (active: boolean) => void) {
+  mockModeListeners.push(listener);
+  listener(isMockMode);
   return () => {
-    statusListeners = statusListeners.filter(l => l !== listener);
+    mockModeListeners = mockModeListeners.filter(l => l !== listener);
   };
 }
 
-function setBackendDisconnected(val: boolean) {
-  if (backendDisconnected !== val) {
-    backendDisconnected = val;
-    statusListeners.forEach(l => l(val));
+export function setIsMockMode(val: boolean) {
+  if (isMockMode !== val) {
+    isMockMode = val;
+    mockModeListeners.forEach(l => l(val));
   }
 }
 
@@ -295,12 +295,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(body);
     }
 
-    setBackendDisconnected(false);
+    setIsMockMode(false);
     return res.json();
   } catch (err) {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
       try {
-        setBackendDisconnected(true);
+        setIsMockMode(true);
         return handleMockRequest(path, init) as T;
       } catch (mockErr) {
         console.error("Local mock handler failed:", mockErr);
