@@ -87,7 +87,7 @@ def get_client():
     return _client
 
 
-MODEL = "gemini-2.5-flash"
+MODEL = "gemini-3.5-flash"
 
 
 # ---------------------------------------------------------------------------
