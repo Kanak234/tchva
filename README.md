@@ -99,7 +99,7 @@ python3 scripts/check_locale_keys.py
 
 A judge will ask this. The short answer:
 
-1. Farmers sign in with a **phone number and OTP** (Firebase Auth).
+1. Farmers sign in with **Google Sign-In** (Firebase Auth).
 2. Every API call carries a **signed ID token**, verified server-side in
    `api/auth.py` against Google's public keys. It cannot be forged.
 3. Every farm-scoped read checks **ownership**. One farmer cannot read
@@ -112,7 +112,7 @@ A judge will ask this. The short answer:
    names, nothing identifying an individual.
 
 `DEMO_MODE=true` accepts unauthenticated calls as `demo_user` so a live
-audience can tap through without waiting for an SMS. It is a labelled
+audience can tap through without waiting for Google sign-in. It is a labelled
 environment flag, not a hidden bypass. Set it to `false` for anything with
 real farmers in it.
 
@@ -121,9 +121,9 @@ real farmers in it.
 ## Architecture
 
 ```
-Next.js PWA → FastAPI (Cloud Run) → Gemini API
-                ↓                      ↑
-           Rules Engine            (advisory only)
+Next.js PWA → FastAPI (Cloud Run) → Gemini API / Local Ollama (Gemma2)
+                ↓                                 ↑
+           Rules Engine                    (advisory only)
            (deterministic)
                 ↓
            Firestore ← Ingest Worker (Cloud Scheduler)
@@ -142,7 +142,7 @@ Next.js PWA → FastAPI (Cloud Run) → Gemini API
 | Frontend | Next.js 14, TailwindCSS, Firebase Auth |
 | Backend | FastAPI (Python 3.11), Cloud Run |
 | Database | Cloud Firestore |
-| AI | Gemini 2.5 Flash via google-genai SDK |
+| AI | Gemini 2.5 Flash OR Local Ollama (Gemma2, Gemma:2b, etc.) |
 | Scheduling | Cloud Scheduler |
 | Preprocessing | C++20 CLI tool (offline, not in request path) |
 
@@ -173,6 +173,9 @@ Copy `.env.example` to `.env` and fill in:
 
 ```
 GEMINI_API_KEY=...
+USE_OLLAMA=false
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL=gemma2
 GOOGLE_CLOUD_PROJECT=fasal-kavach
 INTERNAL_TOKEN=...
 NEXT_PUBLIC_API_BASE=http://localhost:8080
