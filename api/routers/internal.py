@@ -72,7 +72,7 @@ def load_demo_farms() -> list[dict]:
 
 
 def _check_token(x_internal_token: str | None) -> None:
-    demo = os.getenv("DEMO_MODE", "false").lower() == "true"
+    demo = os.getenv("DEMO_MODE", "true").lower() == "true"
     expected = os.getenv("INTERNAL_TOKEN", "")
     if not demo and expected and x_internal_token != expected:
         raise HTTPException(status_code=403, detail="Invalid internal token")
@@ -149,7 +149,7 @@ async def status():
         "backend": db.backend_name(),
         "persistent": db.backend_name() == "firestore",
         "farms_stored": await db.count_farms(),
-        "demo_mode": os.getenv("DEMO_MODE", "false").lower() == "true",
+        "demo_mode": os.getenv("DEMO_MODE", "true").lower() == "true",
         "seed_file_found": SEED_PATH.exists(),
         "ai_backend": get_ai_backend(),
     }
