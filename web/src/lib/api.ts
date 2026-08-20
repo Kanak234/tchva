@@ -253,6 +253,31 @@ function handleMockRequest(path: string, init?: RequestInit): any {
   return { status: 'ok', mocked: true };
 }
 
+// ---------------------------------------------------------------------------
+// Backend Status / Mock Warning State
+// ---------------------------------------------------------------------------
+let backendDisconnected = false;
+let statusListeners: ((disconnected: boolean) => void)[] = [];
+
+export function isBackendDisconnected() {
+  return backendDisconnected;
+}
+
+export function subscribeToBackendStatus(listener: (disconnected: boolean) => void) {
+  statusListeners.push(listener);
+  listener(backendDisconnected);
+  return () => {
+    statusListeners = statusListeners.filter(l => l !== listener);
+  };
+}
+
+function setBackendDisconnected(val: boolean) {
+  if (backendDisconnected !== val) {
+    backendDisconnected = val;
+    statusListeners.forEach(l => l(val));
+  }
+}
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
@@ -270,10 +295,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
       throw new ApiError(body);
     }
 
+    setBackendDisconnected(false);
     return res.json();
   } catch (err) {
     if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
       try {
+        setBackendDisconnected(true);
         return handleMockRequest(path, init) as T;
       } catch (mockErr) {
         console.error("Local mock handler failed:", mockErr);
