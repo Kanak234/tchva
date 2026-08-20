@@ -109,6 +109,46 @@ async def lifespan(app: FastAPI):
                             }
                         )
                     )
+
+                    # Trigger auto-ingestion in the background so it is immediately populated
+                    from ingest.job import run_pipeline
+                    from routers.farms import GRID_CELLS
+                    
+                    async def run_initial_ingest(farms_data):
+                        try:
+                            from db import store_event, store_advisory, store_weather
+                            result = await run_pipeline(
+                                farms=farms_data,
+                                grid_cells=GRID_CELLS,
+                                baselines=app.state.baselines,
+                                crop_calendar=app.state.crop_calendar,
+                            )
+                            for event in result.get("events", []):
+                                await store_event(event)
+                            for advisory in result.get("advisories", []):
+                                await store_advisory(advisory)
+                            for key, weather in result.get("weather", {}).items():
+                                await store_weather(key, weather)
+                            logger.info(
+                                json.dumps(
+                                    {
+                                        "event": "auto_ingest_success",
+                                        "stats": result.get("stats", {}),
+                                    }
+                                )
+                            )
+                        except Exception as ingest_exc:
+                            logger.error(
+                                json.dumps(
+                                    {
+                                        "event": "auto_ingest_failed",
+                                        "error": str(ingest_exc),
+                                    }
+                                )
+                            )
+                            
+                    import asyncio
+                    asyncio.create_task(run_initial_ingest(await get_all_farms()))
                 else:
                     logger.warning(
                         json.dumps(
