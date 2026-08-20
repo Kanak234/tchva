@@ -214,7 +214,7 @@ async def generate_advisory(
                 response_mime_type="application/json",
                 response_schema=ADVISORY_SCHEMA,
                 temperature=0.2,
-                max_output_tokens=1024,
+                max_output_tokens=8192,
             ),
         )
 
@@ -241,7 +241,7 @@ async def generate_advisory(
                     response_mime_type="application/json",
                     response_schema=ADVISORY_SCHEMA,
                     temperature=0.1,
-                    max_output_tokens=1024,
+                    max_output_tokens=8192,
                 ),
             )
             text2 = response2.text

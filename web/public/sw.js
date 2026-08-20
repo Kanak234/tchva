@@ -1,8 +1,8 @@
 // Service Worker — Section 23.4
 // Cache strategy per route type
 
-const CACHE_NAME = "fasal-kavach-v1";
-const SHELL_CACHE = "fk-shell-v1";
+const CACHE_NAME = "fasal-kavach-v3";
+const SHELL_CACHE = "fk-shell-v3";
 
 // Cache-first assets (app shell + static)
 const CACHE_FIRST_PATTERNS = [
