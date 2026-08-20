@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import RegisterSW from "@/components/RegisterSW";
+import DemoBanner from "@/components/DemoBanner";
 
 export const metadata: Metadata = {
   title: "Fasal Kavach — AI Crop Advisory",
@@ -45,6 +46,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
         <RegisterSW />
+        <DemoBanner />
         {children}
       </body>
     </html>
