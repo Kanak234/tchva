@@ -176,5 +176,5 @@ async def healthz():
         "service": "fasal-kavach-api",
         "version": "1.0.0",
         "storage": db.backend_name(),
-        "demo_mode": os.getenv("DEMO_MODE", "false").lower() == "true",
+        "demo_mode": os.getenv("DEMO_MODE", "true").lower() == "true",
     }

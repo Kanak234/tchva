@@ -46,7 +46,7 @@ DEMO_UID = "demo_user"
 
 
 def demo_mode() -> bool:
-    return os.getenv("DEMO_MODE", "false").lower() == "true"
+    return os.getenv("DEMO_MODE", "true").lower() == "true"
 
 
 def _extract_bearer(authorization: str | None) -> str | None:
