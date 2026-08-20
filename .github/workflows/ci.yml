@@ -1,0 +1,65 @@
+name: CI
+
+on:
+  push:
+    branches: [main, "feat/**", "fix/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: |
+          cd api
+          pip install -r requirements.txt
+      - name: Run pytest
+        # USE_FIRESTORE=false pins the in-memory backend. CI has no
+        # service account, and a test suite that needs cloud credentials
+        # is a test suite that stops being run.
+        env:
+          USE_FIRESTORE: "false"
+          DEMO_MODE: "true"
+        run: |
+          cd api
+          pytest -q --tb=short tests/
+
+  lint-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: pip install ruff
+      - run: ruff check api/ --ignore E501
+
+  check-locale-keys:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Every language must have every key
+        run: python3 scripts/check_locale_keys.py
+
+  build-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - name: Install and type-check
+        run: |
+          cd web
+          npm ci
+          npx tsc --noEmit

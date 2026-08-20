@@ -1,0 +1,53 @@
+rules_version = "2";
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isOwner(uid){ return signedIn() && request.auth.uid == uid; }
+    function isOfficer() {
+      return signedIn() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid))
+          .data.role == "officer";
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+    }
+
+    match /farms/{farmId} {
+      allow read: if isOwner(resource.data.owner_uid) || isOfficer();
+      allow create: if isOwner(request.resource.data.owner_uid);
+      allow update: if isOwner(resource.data.owner_uid);
+      allow delete: if isOwner(resource.data.owner_uid);
+    }
+
+    // Advisories and risk events are written ONLY by the backend
+    // service account, which bypasses these rules via Admin SDK.
+    match /advisories/{id} {
+      allow read: if signedIn() && (
+        get(/databases/$(database)/documents/farms/$(resource.data.farm_id))
+          .data.owner_uid == request.auth.uid || isOfficer());
+      allow write: if false;
+    }
+
+    match /risk_events/{id} {
+      allow read: if isOfficer();
+      allow write: if false;
+    }
+
+    match /weather_cache/{id} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /crop_calendar/{id} {
+      allow read: if signedIn();
+      allow write: if false;
+    }
+
+    match /feedback/{id} {
+      allow create: if signedIn();
+      allow read: if isOfficer();
+      allow update, delete: if false;
+    }
+  }
+}
