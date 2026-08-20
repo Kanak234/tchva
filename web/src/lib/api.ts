@@ -230,22 +230,32 @@ function handleMockRequest(path: string, init?: RequestInit): any {
   if (path === '/api/v1/ask' && method === 'POST') {
     const q = (body.question || '').toLowerCase();
     const lang = body.language || 'hi';
+    const farmId = body.farm_id || 'f_demo_01';
+    const farms = getMockFarms();
+    const farm = farms.find((f: Farm) => f.farm_id === farmId) || farms[0];
+    const cropName = farm ? farm.crop : 'paddy';
     
     let answer = lang === 'en' 
-      ? "Paddy sowing in August requires careful water management. Given the forecast of heavy rains in Daru grid, keep the drainage canals open. Apply nitrogen fertilizer only after the heavy rain ceases."
-      : "अगस्त में धान की बुवाई के लिए जल प्रबंधन बहुत महत्वपूर्ण है। दारू ग्रिड में भारी बारिश के पूर्वानुमान को देखते हुए जल निकासी नालियों को खुला रखें। भारी बारिश रुकने के बाद ही नाइट्रोजन उर्वरक का छिड़काव करें।";
+      ? `Sowing ${cropName} in August requires careful water management. Given the forecast of heavy rains in Daru grid, keep the drainage canals open. Apply nitrogen fertilizer only after the heavy rain ceases.`
+      : `अगस्त में ${cropName === 'paddy' ? 'धान' : cropName === 'tomato' ? 'टमाटर' : cropName === 'maize' ? 'मक्का' : 'फसल'} की बुवाई के लिए जल प्रबंधन बहुत महत्वपूर्ण है। दारू ग्रिड में भारी बारिश के पूर्वानुमान को देखते हुए जल निकासी नालियों को खुला रखें। भारी बारिश रुकने के बाद ही नाइट्रोजन उर्वरक का छिड़काव करें।`;
     
-    if (q.includes('कीट') || q.includes('pest') || q.includes('diseas') || q.includes('बीमारी')) {
-      answer = lang === 'en'
-        ? "Monitor for stem borer and blast disease. Spray Neem Oil (1500 ppm) at 5ml/L of water under clear sky conditions."
-        : "तना छेदक (stem borer) और झुलसा रोग (blast) पर नज़र रखें। मौसम साफ होने पर 5 मिली प्रति लीटर पानी की दर से नीम तेल (1500 ppm) का छिड़काव करें।";
+    if (q.includes('कीट') || q.includes('pest') || q.includes('diseas') || q.includes('बीमारी') || q.includes('potato') || q.includes('आलू')) {
+      if (cropName === 'potato') {
+        answer = lang === 'en'
+          ? "Monitor potato crop for late blight and aphid infestations. Apply copper-based fungicides if humidity persists above 85%."
+          : "आलू की फसल में पछेती झुलसा (late blight) और चेपा (aphids) के प्रकोप पर नज़र रखें। यदि आर्द्रता 85% से अधिक बनी रहे तो तांबा आधारित कवकनाशी का छिड़काव करें।";
+      } else {
+        answer = lang === 'en'
+          ? `Monitor ${cropName} for stem borer and blast disease. Spray Neem Oil (1500 ppm) at 5ml/L of water under clear sky conditions.`
+          : `${cropName === 'paddy' ? 'धान' : cropName === 'tomato' ? 'टमाटर' : cropName === 'maize' ? 'मक्का' : 'फसल'} में तना छेदक (stem borer) और झुलसा रोग (blast) पर नज़र रखें। मौसम साफ होने पर 5 मिली प्रति लीटर पानी की दर से नीम तेल (1500 ppm) का छिड़काव करें।`;
+      }
     }
 
     return {
       answer_text: answer,
       spoken_script: answer,
       grounded: true,
-      used_context: ["Crop Calendar - Paddy", "IMD Weather Forecast - Daru"],
+      used_context: [`Crop Calendar - ${cropName}`, "IMD Weather Forecast - Daru"],
       confidence_note: "Grounded in agronomic rules and local weather forecast"
     };
   }
@@ -298,6 +308,11 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     setIsMockMode(false);
     return res.json();
   } catch (err) {
+    if (err instanceof ApiError) {
+      // Server returned a structured HTTP error (e.g. 404), meaning connection is active.
+      // Do not silently fallback to mock mode for missing resource error.
+      throw err;
+    }
     if (process.env.NEXT_PUBLIC_DEMO_MODE === 'true') {
       try {
         setIsMockMode(true);
