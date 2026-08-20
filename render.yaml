@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: fasal-kavach-api
+    env: docker
+    plan: free
+    region: singapore
+    envVars:
+      - key: USE_FIRESTORE
+        value: "false"
+      - key: DEMO_MODE
+        value: "true"
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: USE_OLLAMA
+        value: "false"
+      - key: OPEN_METEO_BASE
+        value: https://api.open-meteo.com/v1
+      - key: INTERNAL_TOKEN
+        value: fsk_secure_token_38294
+      - key: FRONTEND_ORIGIN
+        value: https://fasal-kavach.web.app
