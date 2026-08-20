@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import re
+
 import httpx
 
 # google-genai is optional at test time — validate_advisory and extract_numbers
@@ -37,14 +38,13 @@ OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "gemma2")
 USE_OLLAMA = os.getenv("USE_OLLAMA", "false").lower() == "true"
 
 
-def should_use_ollama() -> bool:
+def get_ai_backend() -> str:
+    """Return the active AI backend ('ollama', 'gemini', or 'template')."""
     if USE_OLLAMA:
-        return True
-    # If Gemini API key is missing, default to Ollama fallback
-    api_key = os.getenv("GEMINI_API_KEY", "")
-    if not api_key:
-        return True
-    return False
+        return "ollama"
+    if os.getenv("GEMINI_API_KEY"):
+        return "gemini"
+    return "template"
 
 
 async def call_ollama(system_instruction: str, prompt: str, format_json: bool) -> str:
@@ -177,12 +177,17 @@ async def generate_advisory(
     Returns the advisory dict on success, None on failure (caller falls
     back to template).
     """
+    ai_choice = get_ai_backend()
+    if ai_choice == "template":
+        logger.info("AI backend set to template, skipping LLM generation")
+        return None
+
     lang_name = LANGUAGE_NAMES.get(language, "Hindi")
     system_instruction = ADVISORY_SYSTEM.format(language=lang_name)
     context_block = build_context_block(event)
 
     try:
-        if should_use_ollama():
+        if ai_choice == "ollama":
             logger.info(f"Generating advisory using local Ollama model {OLLAMA_MODEL}")
             text = await call_ollama(system_instruction, context_block, format_json=True)
             result = json.loads(text)
@@ -251,7 +256,7 @@ async def generate_advisory(
         return result
 
     except Exception:
-        logger.exception("Gemini advisory generation failed")
+        logger.exception(f"AI advisory generation failed using {ai_choice}")
         return None
 
 
@@ -371,6 +376,11 @@ async def ask_question(
 
     Returns dict with answer_text, spoken_script, grounded, used_context.
     """
+    ai_choice = get_ai_backend()
+    if ai_choice == "template":
+        logger.info("AI backend set to template, returning ungrounded response")
+        return _ungrounded_response(language)
+
     lang_name = LANGUAGE_NAMES.get(language, "Hindi")
     system_instruction = ASK_SYSTEM.format(language=lang_name)
 
@@ -404,7 +414,7 @@ async def ask_question(
             used_context.append(f"advisory_{adv.get('event_id', '')}")
 
     try:
-        if should_use_ollama():
+        if ai_choice == "ollama":
             logger.info(f"Answering question using local Ollama model {OLLAMA_MODEL}")
             prompt = f"Question: {question}\n\n{context_block}"
             text = await call_ollama(system_instruction, prompt, format_json=True)
@@ -439,7 +449,7 @@ async def ask_question(
         return result
 
     except Exception:
-        logger.exception("Gemini Q&A failed")
+        logger.exception(f"AI Q&A failed using {ai_choice}")
         return _ungrounded_response(language)
 
 

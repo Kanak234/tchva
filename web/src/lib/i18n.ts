@@ -75,6 +75,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'evidence.source': 'Guidance based on',
     'evidence.data': 'Data from Open-Meteo',
     'feedback.thanks': 'Thank you for your feedback!',
+    'demo.mockWarning': '⚠️ Demo data — backend not connected. Advisories are simulated, not generated from live weather.',
   },
   hi: {
     'login.subtitle': 'अपनी फसल बचाने के लिए साइन इन करें',
@@ -142,6 +143,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'evidence.source': 'सलाह का आधार',
     'evidence.data': 'डेटा स्रोत: Open-Meteo',
     'feedback.thanks': 'आपकी प्रतिक्रिया के लिए धन्यवाद!',
+    'demo.mockWarning': '⚠️ डेमो डेटा — बैकएंड कनेक्ट नहीं है। ये सलाह असली मौसम से नहीं बनी, simulated है।',
   },
   kho: {
     'ask.subtitle': 'अपन खेत के बारे में पूछू',
@@ -209,6 +211,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'alert.yes': 'हाँ',
     'alert.no': 'नाहीं',
     'feedback.thanks': 'धन्यवाद!',
+    'demo.mockWarning': '⚠️ डेमो डेटा — बैकएंड कनेक्ट नइ छै। ई सलाह असली मौसम से नइ बनल ह, simulated ह।',
   },
   bn: {
     'ask.subtitle': 'আপনার খামার সম্পর্কে জিজ্ঞাসা করুন',
@@ -276,6 +279,7 @@ const translations: Record<Lang, Record<string, string>> = {
     'alert.yes': 'হ্যাঁ',
     'alert.no': 'না',
     'feedback.thanks': 'আপনার মতামতের জন্য ধন্যবাদ!',
+    'demo.mockWarning': '⚠️ ডেমো ডেটা — ব্যাকএন্ড সংযুক্ত নেই। এই পরামর্শগুলি আসল আবহাওয়া থেকে তৈরি হয়নি, কৃত্রিম (simulated)।',
   },
 };
 

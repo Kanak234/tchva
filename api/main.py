@@ -76,6 +76,58 @@ async def lifespan(app: FastAPI):
         )
     )
 
+    # Auto-seed if running on in-memory database and database is empty (and not in unit tests)
+    import sys
+    if backend == "memory" and "pytest" not in sys.modules:
+        from pathlib import Path
+
+        from routers.farms import get_all_farms, seed_farms
+
+        try:
+            current_farms = await get_all_farms()
+            if not current_farms:
+                _HERE = Path(__file__).resolve()
+                _CANDIDATES = [
+                    _HERE.parent.parent / "data" / "seed" / "demo_farms.json",  # repo checkout
+                    _HERE.parent / "data" / "seed" / "demo_farms.json",         # Docker image
+                    Path("/app/data/seed/demo_farms.json"),                     # explicit fallback
+                ]
+                seed_path = next((p for p in _CANDIDATES if p.exists()), _CANDIDATES[0])
+
+                if seed_path.exists():
+                    with open(seed_path, encoding="utf-8") as f:
+                        payload = json.load(f)
+                    farms = payload.get("farms", [])
+                    clean_farms = [{k: v for k, v in f.items() if not k.startswith("_")} for f in farms]
+                    seeded = await seed_farms(clean_farms)
+                    logger.info(
+                        json.dumps(
+                            {
+                                "event": "auto_seed_triggered",
+                                "count": seeded,
+                                "path": str(seed_path),
+                            }
+                        )
+                    )
+                else:
+                    logger.warning(
+                        json.dumps(
+                            {
+                                "event": "auto_seed_failed",
+                                "reason": f"seed_file_not_found_at_any_candidate: {[str(p) for p in _CANDIDATES]}",
+                            }
+                        )
+                    )
+        except Exception as exc:
+            logger.error(
+                json.dumps(
+                    {
+                        "event": "auto_seed_failed",
+                        "error": str(exc),
+                    }
+                )
+            )
+
     yield
 
 
@@ -92,15 +144,16 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS — allow the Next.js dev server and the deployed frontend
+# CORS — allow multiple origins parsed from environment variable FRONTEND_ORIGIN
+raw_origins = os.getenv(
+    "FRONTEND_ORIGIN",
+    "https://fasal-kavach.web.app,http://localhost:3000,http://localhost:3001"
+)
+origins = [o.strip() for o in raw_origins.split(",") if o.strip()]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:3000",
-        "http://localhost:3001",
-        "https://fasal-kavach.web.app",
-        os.getenv("FRONTEND_ORIGIN", "*"),
-    ],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
