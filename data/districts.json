@@ -1,0 +1,6 @@
+[
+  {"grid_id": "HZB-01", "lat": 24.00, "lon": 85.25, "name": "Hazaribagh NW", "state": "Jharkhand", "district": "Hazaribagh"},
+  {"grid_id": "HZB-02", "lat": 24.00, "lon": 85.50, "name": "Hazaribagh NE", "state": "Jharkhand", "district": "Hazaribagh"},
+  {"grid_id": "HZB-03", "lat": 23.75, "lon": 85.25, "name": "Hazaribagh SW", "state": "Jharkhand", "district": "Hazaribagh"},
+  {"grid_id": "HZB-04", "lat": 23.75, "lon": 85.50, "name": "Hazaribagh SE", "state": "Jharkhand", "district": "Hazaribagh"}
+]

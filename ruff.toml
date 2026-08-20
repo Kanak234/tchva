@@ -1,0 +1,29 @@
+# Lint configuration — pinned so CI and your laptop agree.
+#
+# Without this file, `pip install ruff` in CI picks up whatever rule set
+# the newest release ships with, and a green build turns red because a
+# linter changed its mind. Pin the rules; upgrade them deliberately.
+
+line-length = 100
+target-version = "py311"
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "F",   # pyflakes — real bugs: undefined names, unused imports
+    "I",   # import sorting
+    "UP",  # pyupgrade — modern syntax
+    "B",   # bugbear — likely mistakes
+]
+ignore = [
+    "E501",  # line length: prose in docstrings, not worth wrapping
+    "B008",  # function call in default arg — this is how FastAPI's
+             # Depends() and Header() are meant to be written
+]
+
+[lint.per-file-ignores]
+# Tests deliberately import modules after sys.path manipulation.
+"api/tests/*" = ["E402"]
+"api/main.py" = ["E402"]
+# Streamlit app inserts api/ on sys.path before importing the rules engine.
+"streamlit_app.py" = ["E402"]

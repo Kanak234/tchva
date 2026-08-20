@@ -1,0 +1,48 @@
+{
+  "hosting": {
+    "public": "web/out",
+    "cleanUrls": true,
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/farm/**",
+        "destination": "/farm/_.html"
+      },
+      {
+        "source": "/alerts/**",
+        "destination": "/alerts/_.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(js|css|ico|png|jpg|webp|svg|woff2)",
+        "headers": [
+          {
+            "key": "Cache-Control",
+            "value": "public, max-age=31536000, immutable"
+          }
+        ]
+      },
+      {
+        "source": "**",
+        "headers": [
+          {
+            "key": "X-Content-Type-Options",
+            "value": "nosniff"
+          },
+          {
+            "key": "X-Frame-Options",
+            "value": "DENY"
+          }
+        ]
+      }
+    ]
+  },
+  "firestore": {
+    "rules": "firestore.rules"
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "name": "Fasal Kavach",
+  "short_name": "फसल कवच",
+  "description": "AI Climate Early-Warning & Crop Advisory for Smallholder Farmers",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#17563B",
+  "theme_color": "#17563B",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["productivity", "weather"],
+  "lang": "hi-IN"
+}

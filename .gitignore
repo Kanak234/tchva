@@ -1,0 +1,47 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# Firebase
+.firebase/
+firebase-debug.log
+
+# Build
+.next/
+out/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets - NEVER commit these
+*.json.key
+service-account*.json
+*-credentials.json
+
+# Raw data (large files)
+data/raw/
+
+# C++ build
+tools/preprocess/build/
+tools/preprocess/fk-preprocess
+
+# Coverage
+.coverage
+htmlcov/
+.pytest_cache/
