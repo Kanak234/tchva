@@ -14,7 +14,7 @@ import { getToken } from './auth';
 // Static export: no Next.js server to proxy, so the browser calls the
 // backend directly via NEXT_PUBLIC_API_BASE. CORS is handled by the
 // backend (see CORSMiddleware in api/main.py).
-const BASE = process.env.NEXT_PUBLIC_API_BASE || '';
+const BASE = 'https://tchva-1.onrender.com';
 
 export class ApiError extends Error {
   code: string;
