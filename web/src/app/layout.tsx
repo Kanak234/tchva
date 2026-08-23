@@ -4,7 +4,7 @@ import RegisterSW from "@/components/RegisterSW";
 import DemoBanner from "@/components/DemoBanner";
 
 export const metadata: Metadata = {
-  title: "Fasal Kavach — AI Crop Advisory",
+  title: "Fasal Kavach — Climate Early-Warning for Farmers",
   description:
     "Climate early-warning and crop advisory for smallholder farmers. " +
     "Rules decide risk; AI communicates it in your language.",
@@ -19,8 +19,8 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
-  themeColor: "#17563B",
+  maximumScale: 5,
+  themeColor: "#1B1A15",
 };
 
 export default function RootLayout({
@@ -31,20 +31,26 @@ export default function RootLayout({
   return (
     <html lang="hi">
       <head>
-        {/* Inter font — loaded via Google Fonts CDN instead of next/font
-            because next/font's optimization requires a running Next.js
-            server, which static export does not have. */}
+        {/* Fonts load from the CDN rather than next/font because next/font's
+            build-time optimisation needs a running Next server, which a
+            static export does not have.
+
+            Archivo   — display + UI. Condensed, industrial; the lettering of
+                        a painted mandi advisory board.
+            IBM Plex Mono — every number in the app. Temperatures, rainfall,
+                        days-after-sowing read as instrument output, not prose.
+            Noto Sans Devanagari / Bengali — Hindi, Khortha, Bengali. */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@400;500;600&family=Noto+Sans+Devanagari:wght@400;500;600;700&family=Noto+Sans+Bengali:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link rel="icon" href="/favicon.ico" sizes="any" />
         <meta name="mobile-web-app-capable" content="yes" />
         <meta name="apple-mobile-web-app-capable" content="yes" />
       </head>
-      <body className="antialiased" style={{ fontFamily: "'Inter', sans-serif" }}>
+      <body>
         <RegisterSW />
         <DemoBanner />
         {children}

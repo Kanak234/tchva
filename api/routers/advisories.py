@@ -145,12 +145,29 @@ async def get_advisory(advisory_id: str, uid: str = Depends(current_uid)):
 
 @router.get("/weather/{grid_id}")
 async def get_weather(grid_id: str):
-    """7-day forecast for a grid cell. Public — weather is not personal data."""
+    """
+    7-day forecast for a grid cell. Public — weather is not personal data.
+
+    Reports whether this window contains synthetic weather. When
+    Open-Meteo is unreachable the ingest falls back to generated records
+    so the app still functions, but every advisory derived from those
+    records inherits invented rainfall while still citing a real ICAR
+    threshold. A farmer must be able to tell those apart before spending
+    money on a spray, so the flag rides along with the data instead of
+    being left in a log line nobody reads.
+    """
     records = await db.weather_for_grid(grid_id)
+    window = records[-7:]
+
+    sources = sorted({r.get("source", "unknown") for r in window})
+    has_synthetic = any(s == "mock-fallback" for s in sources)
+
     return {
         "grid_id": grid_id,
         "count": len(records),
-        "forecast": records[-7:],  # Latest 7 days
+        "forecast": window,
+        "sources": sources,
+        "has_synthetic_data": has_synthetic,
     }
 
 

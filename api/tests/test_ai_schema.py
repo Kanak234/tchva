@@ -98,32 +98,51 @@ class TestExtractNumbers:
         assert -2 in extract_numbers("Temperature will drop to -2 degrees")
 
 
+@pytest.fixture(autouse=True)
+def _isolate_ai_env(monkeypatch):
+    """
+    Clear the AI environment for every test in this module.
+
+    These tests used to read whatever keys happened to be exported in the
+    developer's shell. That made them pass on a clean machine and fail
+    after `source .env` — and worse, the fallback tests below reached the
+    real Groq and Gemini APIs from the test suite. Tests must not depend
+    on ambient credentials, and must never make network calls.
+    """
+    for key in ("AI_BACKENDS", "GROQ_API_KEY", "GEMINI_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+
+
 class TestAIBackendLadder:
     def test_get_ai_backend_ollama(self):
         with patch("ai.client.USE_OLLAMA", True):
             assert get_ai_backend() == "ollama"
 
-    def test_get_ai_backend_gemini(self):
-        with patch("ai.client.USE_OLLAMA", False), \
-             patch.dict(os.environ, {"GEMINI_API_KEY": "test-key"}):
+    def test_get_ai_backend_gemini(self, monkeypatch):
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        with patch("ai.client.USE_OLLAMA", False):
             assert get_ai_backend() == "gemini"
 
+    def test_groq_outranks_gemini(self, monkeypatch):
+        """Groq is the intended primary when both keys are present."""
+        monkeypatch.setenv("GROQ_API_KEY", "gsk-test")
+        monkeypatch.setenv("GEMINI_API_KEY", "test-key")
+        with patch("ai.client.USE_OLLAMA", False):
+            assert get_ai_backend() == "groq"
+
     def test_get_ai_backend_template(self):
-        with patch("ai.client.USE_OLLAMA", False), \
-             patch.dict(os.environ, {}):
-            if "GEMINI_API_KEY" in os.environ:
-                del os.environ["GEMINI_API_KEY"]
+        with patch("ai.client.USE_OLLAMA", False):
             assert get_ai_backend() == "template"
 
     @pytest.mark.asyncio
-    async def test_generate_advisory_template_fallback(self):
-        with patch("ai.client.get_ai_backend", return_value="template"):
-            result = await generate_advisory({"evidence": {}}, "en")
-            assert result is None
+    async def test_generate_advisory_template_fallback(self, monkeypatch):
+        monkeypatch.setenv("AI_BACKENDS", "template")
+        result = await generate_advisory({"evidence": {}}, "en")
+        assert result is None
 
     @pytest.mark.asyncio
-    async def test_ask_question_template_fallback(self):
-        with patch("ai.client.get_ai_backend", return_value="template"):
-            result = await ask_question("any question", "en", {})
-            assert result["grounded"] is False
-            assert "I do not have that information" in result["answer_text"]
+    async def test_ask_question_template_fallback(self, monkeypatch):
+        monkeypatch.setenv("AI_BACKENDS", "template")
+        result = await ask_question("any question", "en", {})
+        assert result["grounded"] is False
+        assert "I do not have that information" in result["answer_text"]

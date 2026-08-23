@@ -153,7 +153,7 @@ class Advisory(BaseModel):
     body: str  # <= 320 chars
     actions: list[str]  # exactly 3, each <= 90 chars
     spoken_script: str  # <= 55 words, natural read aloud
-    generated_by: Literal["gemini", "template"]
+    generated_by: Literal["groq", "gemini", "ollama", "template"]
     model_version: str | None = None
     read: bool = False
     window_start: date | None = None

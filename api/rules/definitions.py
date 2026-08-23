@@ -7,7 +7,7 @@ comment naming where it came from.
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import date, timedelta
 
 from rules.engine import RuleContext, rule, severity_for
 
@@ -62,6 +62,22 @@ HARVEST_WINDOW_DAYS = 10
 # Source: IMD cold wave criteria for Jharkhand.
 # t_min < 4°C for rabi crops and vegetables.
 FROST_TMIN_C = 4.0
+
+
+def week_anchor(day: date) -> date:
+    """
+    Monday of the ISO week containing `day`.
+
+    Used as the window start for rules that describe a *persistent
+    condition* rather than a discrete event. event_id is a hash of
+    (farm_id, rule_id, window_start), so anchoring to the week keeps the
+    id stable Monday to Sunday and the advisory upserts in place instead
+    of a fresh one appearing every morning.
+
+    Rules that fire on genuinely discrete days (heat spell, harvest rain,
+    frost) anchor to those days and should stay that way.
+    """
+    return day - timedelta(days=day.weekday())
 
 
 # =========================  RULE DEFINITIONS  ==============================
@@ -226,7 +242,11 @@ def dry_spell(ctx: RuleContext):
     return ctx.event(
         rule_id="DRY_SPELL",
         severity=sev,
-        window=(ctx.today, ctx.today + timedelta(days=dry_days)),
+        # Week-anchored. A dry spell is a condition that persists, not a
+        # discrete event: with the window sliding from today, a genuine
+        # three-week drought produced twenty-one separate "irrigate now"
+        # advisories, one per morning. See week_anchor().
+        window=(week_anchor(ctx.today), ctx.today + timedelta(days=dry_days)),
         evidence={
             "dry_days_forecast": dry_days,
             "threshold_days": DRY_SPELL_DAYS,
@@ -264,14 +284,42 @@ def pest_weather_window(ctx: RuleContext):
     if len(pest_days) < 3:
         return None
 
+    # Severity is capped at MODERATE here, deliberately.
+    #
+    # severity_for() divides a value by a threshold, which assumes the
+    # value can keep climbing. This one cannot: it is a count of days
+    # inside a 7-day forecast, so it saturates at 7. Against a threshold
+    # of 3 that makes any run of 6+ days automatically SEVERE — and in a
+    # Hazaribagh monsoon, humidity above 85% with nights at 24-26C (dead
+    # centre of the paddy band, which spans a full 10 degrees) is simply
+    # what the weather does. Measured against ordinary monsoon values the
+    # rule fires 7 days out of 7.
+    #
+    # A SEVERE alert every day all season is worse than no alert: farmers
+    # learn to dismiss the app, and the flood warning that actually
+    # matters gets dismissed with it. "Go and scout your field" is useful
+    # advice, but it does not belong at the same severity as "your crop
+    # is about to be under water".
+    #
+    # This caps the damage. It does not make the rule correct.
+    # PEST_HUMIDITY_PCT and PEST_TMIN_BANDS need an agronomist: the
+    # threshold should describe a departure from normal for the week, not
+    # a condition that is normal for the season. There is no humidity
+    # baseline in baselines.json to compare against, and inventing 35-year
+    # percentiles to fill that gap would be exactly the kind of fabricated
+    # provenance this project exists to avoid.
     sev = severity_for(len(pest_days), 3, pest_sens)
     if sev is None:
         return None
+    if sev == "SEVERE":
+        sev = "MODERATE"
 
     return ctx.event(
         rule_id="PEST_WEATHER_WINDOW",
         severity=sev,
-        window=(pest_days[0].date, pest_days[-1].date),
+        # Week-anchored: a scouting advisory is actionable about once a
+        # week, not once a morning. See week_anchor().
+        window=(week_anchor(ctx.today), pest_days[-1].date),
         evidence={
             "pest_favourable_days": len(pest_days),
             "humidity_pct_avg": round(

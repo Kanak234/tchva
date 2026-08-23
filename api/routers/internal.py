@@ -18,6 +18,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import secrets
 from functools import lru_cache
 from pathlib import Path
 
@@ -72,9 +73,49 @@ def load_demo_farms() -> list[dict]:
 
 
 def _check_token(x_internal_token: str | None) -> None:
-    demo = os.getenv("DEMO_MODE", "true").lower() == "true"
+    """
+    Guard the internal endpoints.
+
+    This used to fail open in two ways, and both of them ended with
+    /internal/seed reachable by anyone who guessed the path:
+
+      1. DEMO_MODE defaults to "true", so a deployment that simply never
+         set DEMO_MODE=false left the door open.
+      2. Even with DEMO_MODE=false, the check was skipped entirely when
+         INTERNAL_TOKEN was empty — forgetting to set the secret removed
+         the lock instead of jamming it shut.
+
+    Now the only way past is an explicit DEMO_MODE, and outside demo a
+    missing token is a misconfiguration the service refuses to serve
+    rather than quietly ignore.
+    """
+    if os.getenv("DEMO_MODE", "true").lower() == "true":
+        return
+
     expected = os.getenv("INTERNAL_TOKEN", "")
-    if not demo and expected and x_internal_token != expected:
+    if not expected:
+        logger.error(
+            json.dumps(
+                {
+                    "event": "internal_token_missing",
+                    "detail": "INTERNAL_TOKEN unset outside DEMO_MODE",
+                }
+            )
+        )
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "NOT_CONFIGURED",
+                "message": "Internal endpoints are disabled until "
+                "INTERNAL_TOKEN is set.",
+            },
+        )
+
+    # compare_digest keeps the check constant-time so the token cannot be
+    # recovered a byte at a time by timing the 403.
+    if not x_internal_token or not secrets.compare_digest(
+        x_internal_token, expected
+    ):
         raise HTTPException(status_code=403, detail="Invalid internal token")
 
 

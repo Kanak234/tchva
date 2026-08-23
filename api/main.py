@@ -116,7 +116,7 @@ async def lifespan(app: FastAPI):
                     
                     async def run_initial_ingest(farms_data):
                         try:
-                            from db import save_event, save_advisory, save_weather
+                            from db import save_advisory, save_event, save_weather
                             result = await run_pipeline(
                                 farms=farms_data,
                                 grid_cells=GRID_CELLS,

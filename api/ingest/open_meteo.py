@@ -36,11 +36,14 @@ PARAMS = {
 
 def generate_mock_forecast(grid_id: str, lat: float, lon: float) -> list[WeatherDay]:
     """Generate a realistic 7-day weather forecast fallback for Hazaribagh region."""
-    from datetime import date, timedelta, datetime
     import random
+    from datetime import date, datetime, timedelta
     
-    # Seed based on grid_id to make values deterministic per day/run
-    random.seed(hash(grid_id))
+    # Seed from the grid id so each cell gets a stable pattern.
+    # Uses a byte sum rather than hash(): CPython randomises string
+    # hashing per process, so hash(grid_id) gave a different "stable"
+    # forecast after every restart.
+    random.seed(sum(grid_id.encode("utf-8")))
     
     today = date.today()
     records = []
@@ -89,6 +92,10 @@ async def fetch_grid(
 
     Returns a list of normalised WeatherDay records. Falls back to synthetic weather on failure.
     """
+    # A client created here must also be closed here. Previously this
+    # opened one per call and never closed it, leaking a connection pool
+    # on every ingest cycle.
+    owns_client = client is None
     if client is None:
         client = httpx.AsyncClient(timeout=30.0)
 
@@ -115,6 +122,9 @@ async def fetch_grid(
         except Exception as fallback_exc:
             logger.exception(f"Fallback weather generation failed: {fallback_exc}")
             return []
+    finally:
+        if owns_client:
+            await client.aclose()
 
 
 

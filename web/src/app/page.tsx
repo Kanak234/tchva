@@ -2,18 +2,22 @@
 /**
  * Landing — pick a language, then sign in.
  *
- * CHANGED: this used to go language -> onboarding, with the farm id
- * kept only in localStorage. That meant no account: a new phone lost
- * the farm, and the backend had no idea who was asking.
- *
- * Now: language -> login -> (existing farm ? farm : onboarding).
- * localStorage is still used, but only as a cache. The source of truth
- * is GET /api/v1/me/farms, keyed on the signed-in account.
+ * Flow: language -> login -> (existing farm ? farm : onboarding).
+ * localStorage caches the choice; the source of truth for which farm
+ * belongs to you is GET /api/v1/me/farms, keyed on the account.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "@/lib/i18n";
 import { watchAuth, DEMO_MODE } from "@/lib/auth";
+import { IconShield } from "@/components/Icons";
+
+const LANGS: [Lang, string, string][] = [
+  ["hi", "हिंदी", "Hindi"],
+  ["en", "English", "English"],
+  ["kho", "खोरठा", "Khortha"],
+  ["bn", "বাংলা", "Bengali"],
+];
 
 export default function HomePage() {
   const router = useRouter();
@@ -24,9 +28,8 @@ export default function HomePage() {
     const storedLang = localStorage.getItem("fk_lang") as Lang | null;
     if (storedLang) setLang(storedLang);
 
-    // Firebase restores the session asynchronously. Waiting for that
-    // before deciding avoids a flash of the language screen for a user
-    // who is already signed in.
+    // Firebase restores the session asynchronously. Waiting for it before
+    // deciding avoids flashing the language picker at a signed-in user.
     const unsub = watchAuth((user) => {
       const storedFarm = localStorage.getItem("fk_farm_id");
       const inDemo = localStorage.getItem("fk_demo") === "true";
@@ -39,7 +42,7 @@ export default function HomePage() {
         router.replace("/login");
         return;
       }
-      setChecking(false); // no language chosen yet — show the picker
+      setChecking(false);
     });
 
     return unsub;
@@ -53,43 +56,83 @@ export default function HomePage() {
 
   if (checking) {
     return (
-      <main
-        style={{
-          minHeight: "100dvh",
-          display: "grid",
-          placeItems: "center",
-          background: "var(--surface-alt)",
-        }}
-      >
-        <div style={{ fontSize: "2rem" }}>🌾</div>
+      <main className="shell" style={{ display: "grid", placeItems: "center" }}>
+        <div style={{ color: "var(--paddy)", opacity: 0.5 }}>
+          <IconShield size={38} />
+        </div>
       </main>
     );
   }
 
   return (
-    <main style={{ minHeight: "100dvh", background: "var(--surface-alt)", display: "flex", flexDirection: "column" }}>
-      <div className="top-header" style={{ textAlign: "center", padding: "32px 24px 24px" }}>
-        <div style={{ fontSize: "2.5rem", marginBottom: "8px" }}>🌾</div>
-        <h1 style={{ fontSize: "1.75rem", fontWeight: 800, color: "white", margin: 0 }}>Fasal Kavach</h1>
-        <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "0.9rem", marginTop: "4px" }}>
-          AI Climate Early-Warning for Farmers
-        </p>
-      </div>
-
-      <div style={{ flex: 1, padding: "32px 24px" }}>
-        <p style={{ textAlign: "center", color: "var(--text-secondary)", marginBottom: "24px", fontWeight: 600 }}>
-          {t("lang.select", lang)}
-        </p>
-        <div className="lang-grid" style={{ maxWidth: "360px", margin: "0 auto" }}>
-          {([["hi", "हिंदी", "Hindi"], ["en", "English", "English"], ["kho", "खोरठा", "Khortha"], ["bn", "বাংলা", "Bengali"]] as [Lang, string, string][]).map(
-            ([code, native, name]) => (
-              <button key={code} className="lang-btn fade-in" onClick={() => selectLang(code)}>
-                <span style={{ fontSize: "1.4rem", fontWeight: 700 }}>{native}</span>
-                <span className="lang-name">{name}</span>
-              </button>
-            )
-          )}
+    <main className="shell">
+      <header className="masthead" style={{ paddingBottom: 22 }}>
+        <div className="masthead__wrap">
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ color: "var(--paddy)" }}>
+              <IconShield size={24} />
+            </span>
+            <h1 className="masthead__title" style={{ fontSize: "1.3rem" }}>
+              Fasal Kavach
+            </h1>
+          </div>
+          <span className="masthead__rule" />
+          <p
+            className="data"
+            style={{
+              fontSize: "0.68rem",
+              color: "rgba(239,240,233,0.62)",
+              marginTop: 10,
+              letterSpacing: "0.04em",
+            }}
+          >
+            CLIMATE EARLY-WARNING · SMALLHOLDER FARMS
+          </p>
         </div>
+      </header>
+
+      <div
+        className="sheet"
+        style={{
+          paddingBottom: "var(--sp-5)",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+        }}
+      >
+        <div className="section-head">
+          <span className="eyebrow">{t("lang.select", lang)}</span>
+          <span className="data" style={{ fontSize: "0.65rem", color: "var(--ink-3)" }}>
+            1 / 3
+          </span>
+        </div>
+
+        <div className="langgrid">
+          {LANGS.map(([code, native, latin], i) => (
+            <button
+              key={code}
+              className="langbtn rise"
+              style={{ animationDelay: `${i * 60}ms` }}
+              onClick={() => selectLang(code)}
+              lang={code === "kho" ? "hi" : code}
+            >
+              <span className="langbtn__native">{native}</span>
+              <span className="langbtn__latin">{latin}</span>
+            </button>
+          ))}
+        </div>
+
+        <p
+          style={{
+            marginTop: "var(--sp-5)",
+            fontSize: "0.8rem",
+            color: "var(--ink-3)",
+            lineHeight: 1.6,
+          }}
+        >
+          Warnings, spoken scripts and crop advice all arrive in the language you
+          pick here. You can change it later.
+        </p>
       </div>
     </main>
   );

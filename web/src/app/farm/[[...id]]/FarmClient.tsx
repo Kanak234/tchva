@@ -1,16 +1,43 @@
 "use client";
+/**
+ * Farm dashboard — three tabs: what's wrong, ask a question, field record.
+ *
+ * The Risk Horizon sits above the alert list because the shape of the
+ * week is the thing a farmer wants first. The alerts explain it.
+ */
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { api, type Farm, type Advisory, type WeatherForecast } from "@/lib/api";
 import { t, type Lang } from "@/lib/i18n";
 import { speak, stopSpeaking, isSpeaking as checkSpeaking } from "@/lib/tts";
 import { signOutUser } from "@/lib/auth";
+import RiskHorizon from "@/components/RiskHorizon";
+import {
+  IconAlert,
+  IconAsk,
+  IconCrop,
+  IconCheck,
+  IconRefresh,
+  IconSend,
+  IconSignOut,
+} from "@/components/Icons";
 
 function getFarmIdFromUrl(): string {
   if (typeof window === "undefined") return "";
   const parts = window.location.pathname.split("/farm/");
   return parts[1]?.replace(/\/$/, "") || "";
 }
+
+const SEV_ORDER: Record<string, number> = { SEVERE: 0, MODERATE: 1, LOW: 2 };
+
+/** Three animated strokes — the listen button's state, without emoji. */
+const Bars = () => (
+  <span className="bars">
+    <i />
+    <i />
+    <i />
+  </span>
+);
 
 export default function FarmClient() {
   const router = useRouter();
@@ -24,170 +51,425 @@ export default function FarmClient() {
   const [speakingId, setSpeakingId] = useState<string | null>(null);
   const [tab, setTab] = useState<"alerts" | "ask" | "farm">("alerts");
   const [question, setQuestion] = useState("");
-  const [askResult, setAskResult] = useState<{ answer_text: string; spoken_script: string; grounded: boolean } | null>(null);
+  const [askResult, setAskResult] = useState<{
+    answer_text: string;
+    spoken_script: string;
+    grounded: boolean;
+  } | null>(null);
   const [asking, setAsking] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("fk_lang") as Lang | null;
     if (stored) setLang(stored);
     const id = getFarmIdFromUrl() || localStorage.getItem("fk_farm_id") || "";
-    if (!id) { router.replace("/"); return; }
+    if (!id) {
+      router.replace("/");
+      return;
+    }
     setFarmId(id);
   }, [router]);
 
-  const loadData = useCallback(async (silent = false) => {
-    if (!farmId) return;
-    if (!silent) {
-      setLoading(true);
-    }
-    setError("");
-    try {
-      const [farmData, advisoryData] = await Promise.all([api.getFarm(farmId), api.advisories(farmId, lang)]);
-      setFarm(farmData);
-      const order: Record<string, number> = { SEVERE: 0, MODERATE: 1, LOW: 2 };
-      setAdvisories(advisoryData.advisories.sort((a, b) => (order[a.severity] ?? 3) - (order[b.severity] ?? 3) || new Date(b.created_at).getTime() - new Date(a.created_at).getTime()));
-      if (farmData.grid_id) setWeather(await api.weather(farmData.grid_id).catch(() => null));
-    } catch (err) { 
-      setError(err instanceof Error ? err.message : "Failed to load"); 
-    } finally { 
-      if (!silent) {
-        setLoading(false); 
+  const loadData = useCallback(
+    async (silent = false) => {
+      if (!farmId) return;
+      if (!silent) setLoading(true);
+      setError("");
+      try {
+        const [farmData, advisoryData] = await Promise.all([
+          api.getFarm(farmId),
+          api.advisories(farmId, lang),
+        ]);
+        setFarm(farmData);
+        setAdvisories(
+          advisoryData.advisories.sort(
+            (a, b) =>
+              (SEV_ORDER[a.severity] ?? 3) - (SEV_ORDER[b.severity] ?? 3) ||
+              new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
+          )
+        );
+        if (farmData.grid_id) {
+          setWeather(await api.weather(farmData.grid_id).catch(() => null));
+        }
+      } catch (err) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Could not reach the advisory service. Refresh when you have signal."
+        );
+      } finally {
+        if (!silent) setLoading(false);
       }
-    }
-  }, [farmId, lang]);
+    },
+    [farmId, lang]
+  );
 
   useEffect(() => {
     loadData(false);
-    // Background polling every 30 seconds to automatically update real-time data
-    const iv = setInterval(() => {
-      loadData(true);
-    }, 30000);
+    const iv = setInterval(() => loadData(true), 30000);
     return () => clearInterval(iv);
   }, [loadData]);
 
   function handleSpeak(adv: Advisory) {
-    if (speakingId === adv.advisory_id) { stopSpeaking(); setSpeakingId(null); return; }
+    if (speakingId === adv.advisory_id) {
+      stopSpeaking();
+      setSpeakingId(null);
+      return;
+    }
     stopSpeaking();
     speak(adv.spoken_script || `${adv.headline}. ${adv.body}`, lang);
     setSpeakingId(adv.advisory_id);
-    const iv = setInterval(() => { if (!checkSpeaking()) { setSpeakingId(null); clearInterval(iv); } }, 500);
+    const iv = setInterval(() => {
+      if (!checkSpeaking()) {
+        setSpeakingId(null);
+        clearInterval(iv);
+      }
+    }, 500);
   }
 
   async function handleAsk() {
     if (!question.trim() || !farmId) return;
-    setAsking(true); setAskResult(null);
-    try { setAskResult(await api.ask({ farm_id: farmId, question: question.trim(), language: lang })); }
-    catch (err) { setAskResult({ answer_text: err instanceof Error ? err.message : "Error", spoken_script: "", grounded: false }); }
-    finally { setAsking(false); }
+    setAsking(true);
+    setAskResult(null);
+    try {
+      setAskResult(
+        await api.ask({ farm_id: farmId, question: question.trim(), language: lang })
+      );
+    } catch (err) {
+      setAskResult({
+        answer_text:
+          err instanceof Error
+            ? err.message
+            : "That question could not be answered right now. Try again in a moment.",
+        spoken_script: "",
+        grounded: false,
+      });
+    } finally {
+      setAsking(false);
+    }
   }
 
-  async function handleSignOut() { await signOutUser(); localStorage.removeItem("fk_demo"); router.replace("/"); }
-  const sev = (s: string) => s.toLowerCase();
+  async function handleSignOut() {
+    await signOutUser();
+    localStorage.removeItem("fk_demo");
+    router.replace("/");
+  }
 
-  if (loading && !farm) return (
-    <main style={{ minHeight: "100dvh", display: "grid", placeItems: "center", background: "var(--surface-alt)" }}>
-      <div style={{ textAlign: "center" }}><div className="spinner" style={{ margin: "0 auto 16px" }} /><p style={{ color: "var(--text-secondary)" }}>Loading...</p></div>
-    </main>
-  );
+  const sev = (s: string) => s.toLowerCase();
+  const dateFmt = lang === "en" ? "en-IN" : lang === "bn" ? "bn-IN" : "hi-IN";
+
+  // First paint: skeleton, not a spinner. Shows the shape that's coming.
+  if (loading && !farm) {
+    return (
+      <main className="shell">
+        <header className="masthead">
+          <div className="masthead__wrap">
+            <h1 className="masthead__title">Fasal Kavach</h1>
+            <span className="masthead__rule" />
+          </div>
+        </header>
+        <div className="sheet">
+          <div className="skeleton" style={{ height: 168, marginBottom: 20 }} />
+          <div className="skeleton" style={{ height: 118, marginBottom: 12 }} />
+          <div className="skeleton" style={{ height: 118 }} />
+        </div>
+      </main>
+    );
+  }
 
   return (
-    <main style={{ minHeight: "100dvh", background: "var(--surface-alt)" }}>
-      <div className="top-header">
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-          <div>
-            <h1 style={{ fontSize: "1.2rem", fontWeight: 700, margin: 0 }}>🌾 {t("app.name", lang)}</h1>
-            <p style={{ fontSize: "0.8rem", opacity: 0.85, marginTop: 2 }}>{t("app.tagline", lang)}</p>
+    <main className="shell">
+      <header className="masthead">
+        <div className="masthead__wrap">
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-start",
+              justifyContent: "space-between",
+              gap: 12,
+            }}
+          >
+            <div>
+              <h1 className="masthead__title">{t("app.name", lang)}</h1>
+              <span className="masthead__rule" />
+            </div>
+            <button
+              className="icon-btn"
+              onClick={handleSignOut}
+              aria-label={t("login.signOut", lang)}
+            >
+              <IconSignOut size={16} />
+            </button>
           </div>
-          <button onClick={handleSignOut} style={{ background: "rgba(255,255,255,0.15)", border: "1px solid rgba(255,255,255,0.3)", color: "white", padding: "6px 14px", borderRadius: 8, fontSize: "0.8rem", fontWeight: 600, cursor: "pointer" }}>{t("login.signOut", lang)}</button>
+
+          {farm && (
+            <div className="fieldline">
+              <span>{farm.village}</span>
+              <span className="fieldline__sep">/</span>
+              <span>{t(`crop.${farm.crop}`, lang)}</span>
+              <span className="fieldline__sep">/</span>
+              <span>
+                <span className="fieldline__key">HA </span>
+                {farm.area_ha}
+              </span>
+              <span className="fieldline__sep">/</span>
+              <span>
+                <span className="fieldline__key">DAS </span>
+                {farm.days_after_sowing}
+              </span>
+              <span className="fieldline__sep">/</span>
+              <span style={{ textTransform: "uppercase" }}>{farm.growth_stage}</span>
+            </div>
+          )}
         </div>
-        {farm && <div style={{ marginTop: 12, display: "flex", gap: 16, fontSize: "0.82rem", opacity: 0.9, flexWrap: "wrap" }}>
-          <span>📍 {farm.village}</span><span>🌱 {t(`crop.${farm.crop}`, lang)}</span><span>📐 {farm.area_ha} ha</span><span>🌿 {farm.growth_stage}</span>
-        </div>}
-      </div>
+      </header>
 
-      {error && <div style={{ background: "var(--severe-bg)", color: "var(--severe)", padding: "12px 16px", fontSize: "0.9rem", textAlign: "center" }}>{error}</div>}
+      {error && (
+        <div style={{ maxWidth: 560, margin: "0 auto", width: "100%", padding: "12px 16px 0" }}>
+          <div role="alert" className="notice notice--error">
+            {error}
+          </div>
+        </div>
+      )}
 
-      <div className="page-content">
-        {tab === "alerts" && <>
-          {weather && weather.forecast.length > 0 && <div className="fade-in" style={{ marginBottom: 20 }}>
-            <p style={{ fontSize: "0.8rem", fontWeight: 600, color: "var(--text-secondary)", marginBottom: 8 }}>{t("forecast.updated", lang)}</p>
-            <div style={{ display: "flex", gap: 8, overflowX: "auto", paddingBottom: 4 }}>
-              {weather.forecast.slice(0, 5).map(day => (
-                <div key={day.date} style={{ minWidth: 72, padding: "10px 8px", background: "var(--surface)", borderRadius: 12, textAlign: "center", boxShadow: "var(--shadow-card)", fontSize: "0.78rem" }}>
-                  <div style={{ fontWeight: 600, color: "var(--text-secondary)" }}>{new Date(day.date).toLocaleDateString(lang === "en" ? "en-IN" : "hi-IN", { weekday: "short" })}</div>
-                  <div style={{ fontSize: "1.1rem", margin: "4px 0" }}>{day.rain_mm > 5 ? "🌧️" : day.rain_mm > 0 ? "🌦️" : day.t_max_c > 38 ? "🔥" : "☀️"}</div>
-                  <div style={{ fontWeight: 700, fontVariantNumeric: "tabular-nums" }}>{Math.round(day.t_max_c)}° / {Math.round(day.t_min_c)}°</div>
-                  {day.rain_mm > 0 && <div style={{ color: "#2E7D87", fontWeight: 600, fontSize: "0.7rem" }}>{day.rain_mm.toFixed(1)} mm</div>}
+      <div className="sheet">
+        {tab === "alerts" && (
+          <>
+            {/* Say it before the risk strip, not after. Everything below
+                this line — the horizon and every advisory under it — is
+                derived from the same forecast window. */}
+            {weather?.has_synthetic_data && (
+              <div
+                role="alert"
+                className="notice notice--warn rise"
+                style={{ marginBottom: "var(--sp-4)" }}
+              >
+                {t("weather.synthetic", lang)}
+              </div>
+            )}
+
+            {weather && weather.forecast.length > 0 && farm && (
+              <div style={{ marginBottom: "var(--sp-5)" }}>
+                <RiskHorizon forecast={weather.forecast} crop={farm.crop} lang={lang} />
+              </div>
+            )}
+
+            <div className="section-head">
+              <span className="eyebrow">{t("nav.alerts", lang)}</span>
+              <span className="data" style={{ fontSize: "0.65rem", color: "var(--ink-3)" }}>
+                {String(advisories.length).padStart(2, "0")}
+              </span>
+            </div>
+
+            {advisories.length === 0 && !loading && (
+              <div className="empty rise">
+                <div className="empty__mark">
+                  <IconCheck size={20} />
+                </div>
+                <h3 className="display" style={{ fontSize: "1.05rem", marginBottom: 6 }}>
+                  {t("empty.title", lang)}
+                </h3>
+                <p style={{ color: "var(--ink-2)", fontSize: "0.86rem", lineHeight: 1.6 }}>
+                  {t("empty.body", lang)}
+                </p>
+              </div>
+            )}
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              {advisories.map((adv, i) => (
+                <button
+                  key={adv.advisory_id}
+                  className={`advisory advisory--${sev(adv.severity)} ${
+                    !adv.read ? "advisory--unread" : ""
+                  } rise`}
+                  style={{ animationDelay: `${i * 60}ms` }}
+                  onClick={() => router.push(`/alerts/${adv.advisory_id}`)}
+                >
+                  <div className="advisory__top">
+                    <span className={`tag tag--${sev(adv.severity)}`}>
+                      {t(`severity.${adv.severity}`, lang)}
+                    </span>
+                    {adv.generated_by === "template" && (
+                      <span className="tag tag--ghost">{t("template.badge", lang)}</span>
+                    )}
+                  </div>
+
+                  <h3 className="advisory__headline">{adv.headline}</h3>
+                  <p className="advisory__body">
+                    {adv.body.length > 128 ? adv.body.slice(0, 128) + "…" : adv.body}
+                  </p>
+
+                  <div className="advisory__foot">
+                    <span className="advisory__stamp">
+                      {new Date(adv.created_at).toLocaleDateString(dateFmt, {
+                        day: "2-digit",
+                        month: "short",
+                      })}
+                    </span>
+                    <span
+                      role="button"
+                      tabIndex={0}
+                      className={`listen ${speakingId === adv.advisory_id ? "listen--on" : ""}`}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleSpeak(adv);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleSpeak(adv);
+                        }
+                      }}
+                    >
+                      <Bars />
+                      {speakingId === adv.advisory_id
+                        ? t("alert.stop", lang)
+                        : t("alert.listen", lang)}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            <button
+              className="btn btn--quiet btn--block"
+              onClick={() => loadData(false)}
+              disabled={loading}
+              style={{ marginTop: "var(--sp-4)" }}
+            >
+              {loading ? (
+                <span className="spinner" style={{ width: 17, height: 17 }} />
+              ) : (
+                <IconRefresh size={16} />
+              )}
+              Refresh
+            </button>
+          </>
+        )}
+
+        {tab === "ask" && (
+          <div className="rise">
+            <div className="section-head">
+              <span className="eyebrow">{t("ask.title", lang)}</span>
+            </div>
+
+            <p
+              style={{
+                color: "var(--ink-2)",
+                fontSize: "0.86rem",
+                lineHeight: 1.6,
+                marginBottom: "var(--sp-4)",
+              }}
+            >
+              {t("ask.subtitle", lang)}
+            </p>
+
+            {askResult && (
+              <div className="readout rise" style={{ marginBottom: "var(--sp-4)" }}>
+                <p style={{ lineHeight: 1.75, fontSize: "0.92rem" }}>{askResult.answer_text}</p>
+
+                {!askResult.grounded && (
+                  <div className="notice notice--warn" style={{ marginTop: "var(--sp-3)" }}>
+                    {t("ask.ungrounded", lang)}
+                  </div>
+                )}
+
+                {askResult.spoken_script && (
+                  <button
+                    className="listen"
+                    onClick={() => speak(askResult.spoken_script, lang)}
+                    style={{ marginTop: "var(--sp-3)" }}
+                  >
+                    <Bars />
+                    {t("alert.listen", lang)}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8 }}>
+              <input
+                type="text"
+                className="input"
+                placeholder={t("ask.type", lang)}
+                value={question}
+                onChange={(e) => setQuestion(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleAsk()}
+                disabled={asking}
+                aria-label={t("ask.type", lang)}
+              />
+              <button
+                className="btn btn--solid"
+                onClick={handleAsk}
+                disabled={asking || !question.trim()}
+                style={{ minWidth: 58, padding: "0 18px" }}
+                aria-label={t("ask.send", lang)}
+              >
+                {asking ? (
+                  <span className="spinner spinner--light" style={{ width: 17, height: 17 }} />
+                ) : (
+                  <IconSend size={17} />
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {tab === "farm" && farm && (
+          <div className="rise">
+            <div className="section-head">
+              <span className="eyebrow">{t("nav.farm", lang)}</span>
+              <span className="data" style={{ fontSize: "0.63rem", color: "var(--ink-3)" }}>
+                {farm.farm_id}
+              </span>
+            </div>
+
+            <div className="readout">
+              {(
+                [
+                  [t("onboarding.village", lang), farm.village],
+                  [t("onboarding.crop", lang), t(`crop.${farm.crop}`, lang)],
+                  [
+                    t("onboarding.sowing", lang),
+                    new Date(farm.sowing_date).toLocaleDateString(dateFmt, {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                    }),
+                  ],
+                  [t("onboarding.area", lang), `${farm.area_ha} ha`],
+                  [t("onboarding.irrigation", lang), t(`irrigation.${farm.irrigation}`, lang)],
+                  ["Growth stage", farm.growth_stage],
+                  ["Days after sowing", String(farm.days_after_sowing)],
+                  ["Grid cell", farm.grid_id],
+                ] as [string, string][]
+              ).map(([key, val]) => (
+                <div key={key} className="readout__row">
+                  <span className="readout__key">{key}</span>
+                  <span className="readout__val">{val}</span>
                 </div>
               ))}
             </div>
-          </div>}
-
-          {advisories.length === 0 && !loading && <div className="empty-state fade-in">
-            <div style={{ fontSize: "3rem", marginBottom: 16 }}>✅</div>
-            <h2 style={{ fontWeight: 700, marginBottom: 8 }}>{t("empty.title", lang)}</h2>
-            <p>{t("empty.body", lang)}</p>
-          </div>}
-
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {advisories.map((adv, i) => (
-              <div key={adv.advisory_id} className={`alert-card ${sev(adv.severity)} ${!adv.read ? "unread" : ""} slide-up`} style={{ animationDelay: `${i * 0.08}s` }} onClick={() => router.push(`/alerts/${adv.advisory_id}`)}>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                  <span className={`severity-badge ${sev(adv.severity)}`}>{t(`severity.${adv.severity}`, lang)}</span>
-                  {adv.generated_by === "template" && <span className="template-badge">{t("template.badge", lang)}</span>}
-                </div>
-                <h3 style={{ fontSize: "1rem", fontWeight: 700, marginBottom: 6, lineHeight: 1.4 }}>{adv.headline}</h3>
-                <p style={{ fontSize: "0.88rem", color: "var(--text-secondary)", lineHeight: 1.5, marginBottom: 10 }}>{adv.body.length > 120 ? adv.body.slice(0, 120) + "…" : adv.body}</p>
-                <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                  <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>{new Date(adv.created_at).toLocaleDateString(lang === "en" ? "en-IN" : "hi-IN", { day: "numeric", month: "short" })}</span>
-                  <button className={`speak-btn ${speakingId === adv.advisory_id ? "speaking" : ""}`} onClick={e => { e.stopPropagation(); handleSpeak(adv); }} style={{ padding: "6px 12px", minHeight: 36, fontSize: "0.8rem" }}>
-                    {speakingId === adv.advisory_id ? `🔊 ${t("alert.stop", lang)}` : `🔈 ${t("alert.listen", lang)}`}
-                  </button>
-                </div>
-              </div>
-            ))}
           </div>
-          <button className="btn-secondary fade-in" onClick={() => loadData(false)} disabled={loading} style={{ width: "100%", marginTop: 20 }}>{loading ? <span className="spinner" style={{ width: 20, height: 20 }} /> : "↻ Refresh"}</button>
-        </>}
-
-        {tab === "ask" && <div className="fade-in">
-          <div style={{ textAlign: "center", marginBottom: 24 }}>
-            <h2 style={{ fontSize: "1.3rem", fontWeight: 700 }}>{t("ask.title", lang)}</h2>
-            <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem" }}>{t("ask.subtitle", lang)}</p>
-          </div>
-          {askResult && <div className="slide-up" style={{ background: "var(--surface)", padding: 20, borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", marginBottom: 20 }}>
-            <p style={{ lineHeight: 1.7, fontSize: "0.95rem" }}>{askResult.answer_text}</p>
-            {!askResult.grounded && <p style={{ marginTop: 12, fontSize: "0.8rem", color: "var(--moderate)", background: "var(--moderate-bg)", padding: "8px 12px", borderRadius: 8 }}>⚠️ {t("ask.ungrounded", lang)}</p>}
-            {askResult.spoken_script && <button className="speak-btn" onClick={() => speak(askResult.spoken_script, lang)} style={{ marginTop: 12 }}>🔈 {t("alert.listen", lang)}</button>}
-          </div>}
-          <div style={{ display: "flex", gap: 8 }}>
-            <input type="text" className="form-input" placeholder={t("ask.type", lang)} value={question} onChange={e => setQuestion(e.target.value)} onKeyDown={e => e.key === "Enter" && handleAsk()} disabled={asking} />
-            <button className="btn-primary" onClick={handleAsk} disabled={asking || !question.trim()} style={{ minWidth: 64 }}>{asking ? <span className="spinner" style={{ width: 18, height: 18, borderTopColor: "white" }} /> : t("ask.send", lang)}</button>
-          </div>
-        </div>}
-
-        {tab === "farm" && farm && <div className="fade-in">
-          <div style={{ background: "var(--surface)", borderRadius: "var(--radius-card)", boxShadow: "var(--shadow-card)", padding: 20 }}>
-            <h2 style={{ fontSize: "1.1rem", fontWeight: 700, marginBottom: 16 }}>{t("nav.farm", lang)}</h2>
-            {([
-              [t("onboarding.village", lang), farm.village],
-              [t("onboarding.crop", lang), t(`crop.${farm.crop}`, lang)],
-              [t("onboarding.sowing", lang), new Date(farm.sowing_date).toLocaleDateString(lang === "en" ? "en-IN" : "hi-IN")],
-              [t("onboarding.area", lang), `${farm.area_ha} ha`],
-              [t("onboarding.irrigation", lang), t(`irrigation.${farm.irrigation}`, lang)],
-              ["Growth Stage", farm.growth_stage],
-              ["Days After Sowing", `${farm.days_after_sowing}`],
-            ] as [string, string][]).map(([label, value]) => (
-              <div key={label} className="evidence-row"><span className="evidence-label">{label}</span><span className="evidence-value">{value}</span></div>
-            ))}
-          </div>
-        </div>}
+        )}
       </div>
 
-      <nav className="nav-bar">
-        <button className={`nav-item ${tab === "alerts" ? "active" : ""}`} onClick={() => setTab("alerts")}><span style={{ fontSize: "1.3rem" }}>⚠️</span><span>{t("nav.alerts", lang)}</span></button>
-        <button className={`nav-item ${tab === "ask" ? "active" : ""}`} onClick={() => setTab("ask")}><span style={{ fontSize: "1.3rem" }}>💬</span><span>{t("nav.ask", lang)}</span></button>
-        <button className={`nav-item ${tab === "farm" ? "active" : ""}`} onClick={() => setTab("farm")}><span style={{ fontSize: "1.3rem" }}>🌾</span><span>{t("nav.farm", lang)}</span></button>
+      <nav className="tabbar" aria-label="Sections">
+        <button
+          className={`tab ${tab === "alerts" ? "tab--on" : ""}`}
+          onClick={() => setTab("alerts")}
+        >
+          <IconAlert />
+          {t("nav.alerts", lang)}
+        </button>
+        <button className={`tab ${tab === "ask" ? "tab--on" : ""}`} onClick={() => setTab("ask")}>
+          <IconAsk />
+          {t("nav.ask", lang)}
+        </button>
+        <button className={`tab ${tab === "farm" ? "tab--on" : ""}`} onClick={() => setTab("farm")}>
+          <IconCrop />
+          {t("nav.farm", lang)}
+        </button>
       </nav>
     </main>
   );

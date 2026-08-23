@@ -16,7 +16,7 @@ import uuid
 from datetime import date
 
 from ai import cache as ai_cache
-from ai.client import generate_advisory
+from ai.client import generate_advisory, model_id_for
 from models import Advisory, Farm, RiskEvent, WeatherDay
 from rules.crop_calendar import stage_for
 from rules.engine import evaluate
@@ -171,8 +171,11 @@ async def _generate_or_cache_advisory(
             body=cached["body"],
             actions=cached["actions"],
             spoken_script=cached["spoken_script"],
-            generated_by="gemini",
-            model_version="gemini-2.5-flash",
+            # The cache stores which backend produced the entry. Older
+            # entries predate that field, so fall back to template rather
+            # than claiming a provider that may never have run.
+            generated_by=cached.get("generated_by", "template"),
+            model_version=model_id_for(cached.get("generated_by", "template")),
             window_start=event.window_start,
             window_end=event.window_end,
         )
@@ -199,8 +202,8 @@ async def _generate_or_cache_advisory(
             body=result["body"],
             actions=result["actions"],
             spoken_script=result["spoken_script"],
-            generated_by="gemini",
-            model_version="gemini-2.5-flash",
+            generated_by=result.get("generated_by", "template"),
+            model_version=model_id_for(result.get("generated_by", "template")),
             window_start=event.window_start,
             window_end=event.window_end,
         )

@@ -363,7 +363,7 @@ export interface Advisory {
   body: string;
   actions: string[];
   spoken_script: string;
-  generated_by: 'gemini' | 'template';
+  generated_by: 'groq' | 'gemini' | 'ollama' | 'template';
   read: boolean;
   window_start: string;
   window_end: string;
@@ -410,7 +410,17 @@ export interface WeatherForecast {
     t_min_c: number;
     rain_mm: number;
     humidity_pct: number;
+    source?: string;
   }>;
+  /** Which providers this window came from, e.g. ["open-meteo"]. */
+  sources?: string[];
+  /**
+   * True when any day in the window is generated rather than observed.
+   * Advisories built on those days still cite real ICAR thresholds, so
+   * the UI must say so out loud rather than let the citation imply the
+   * rainfall was measured.
+   */
+  has_synthetic_data?: boolean;
 }
 
 // ---------------------------------------------------------------------------
