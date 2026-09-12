@@ -4,7 +4,7 @@
 
 import {
   GoogleAuthProvider,
-  signInWithPopup,
+  signInWithRedirect,
   signOut,
   onAuthStateChanged,
   type User,
@@ -27,7 +27,7 @@ export async function signInWithGoogle(): Promise<string | null> {
     const provider = new GoogleAuthProvider();
     // Prompt the user to select their account
     provider.setCustomParameters({ prompt: 'select_account' });
-    await signInWithPopup(auth, provider);
+    await signInWithRedirect(auth, provider);
     return null;
   } catch (err: unknown) {
     return friendlyError(err);
