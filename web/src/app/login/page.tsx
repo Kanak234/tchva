@@ -5,7 +5,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "@/lib/i18n";
-import { signInWithGoogle, finishGoogleRedirect, canSignIn, watchAuth, DEMO_MODE } from "@/lib/auth";
+import { signInWithGoogle, canSignIn, watchAuth, DEMO_MODE } from "@/lib/auth";
 import { api } from "@/lib/api";
 import { IconShield, IconGoogle, IconArrowLeft } from "@/components/Icons";
 
@@ -38,30 +38,23 @@ export default function LoginPage() {
     router.replace("/onboarding");
   }, [router]);
 
-  // Complete a Firebase redirect result before routing. The auth observer
-  // remains active because Firebase restores the session asynchronously.
+  // Firebase restores an existing session asynchronously on page load.
+  // After popup sign-in, this observer is also the final session signal.
   useEffect(() => {
-    let active = true;
-    finishGoogleRedirect().then((err) => {
-      if (active && err) setError(err);
-    });
-
     const unsubscribe = watchAuth(async (user) => {
-      if (user) await routeAfterSignIn();
+      if (user) {
+        setBusy(false);
+        await routeAfterSignIn();
+      }
     });
 
-    return () => {
-      active = false;
-      unsubscribe();
-    };
+    return () => unsubscribe();
   }, [routeAfterSignIn]);
 
   async function handleGoogleSignIn() {
     setBusy(true);
     setError("");
     const err = await signInWithGoogle();
-    // Redirect normally navigates away before this point. If Firebase rejects
-    // the request locally, keep the user on the page and show the real reason.
     if (err) {
       setBusy(false);
       setError(err);
