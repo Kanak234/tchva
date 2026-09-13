@@ -1,17 +1,30 @@
-/**
- * Firebase configuration — Section 9
- *
- * The web config below is public by design. It identifies the project;
- * it does not authorise anything. What protects data is firestore.rules
- * plus the ID-token check in the backend (api/auth.py).
- *
- * Everything is lazy: nothing initialises until a component actually
- * asks for auth. That keeps the app usable during a build or on a
- * machine with no Firebase project configured yet.
- */
-import { initializeApp, getApps, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import {
+  initializeApp,
+  getApps,
+  type FirebaseApp,
+} from 'firebase/app';
+import {
+  initializeAuth,
+  browserLocalPersistence,
+  browserSessionPersistence,
+  browserPopupRedirectResolver,
+  indexedDBLocalPersistence,
+  type Auth,
+} from 'firebase/auth';
 
+/**
+ * Firebase configuration — Section 9.
+ *
+ * The web config is public by design. It identifies the project;
+ * it does not authorise anything. What protects data is firestore.rules
+ * plus the ID-token check in api/auth.py.
+ *
+ * Auth is initialized explicitly with durable browser persistence instead
+ * of relying on getAuth() defaults. This is important for the static
+ * Firebase Hosting build: a successful popup sign-in must survive the
+ * navigation/reload boundary and must not fall back to a signed-out login
+ * screen.
+ */
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || '',
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || '',
@@ -21,7 +34,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || '',
 };
 
-/** True when a real project has been configured in .env.local. */
 export function isFirebaseConfigured(): boolean {
   return Boolean(firebaseConfig.apiKey && firebaseConfig.projectId);
 }
@@ -42,7 +54,18 @@ export function getFirebaseAuth(): Auth | null {
   if (_auth) return _auth;
   const app = getFirebaseApp();
   if (!app) return null;
-  _auth = getAuth(app);
-  _auth.languageCode = 'hi'; // Firebase sends the OTP SMS in this language
+
+  // Explicitly persist auth in IndexedDB/localStorage, with session storage
+  // as a fallback. Also initialize the browser popup resolver explicitly.
+  // This removes reliance on environment-dependent getAuth() defaults.
+  _auth = initializeAuth(app, {
+    persistence: [
+      indexedDBLocalPersistence,
+      browserLocalPersistence,
+      browserSessionPersistence,
+    ],
+    popupRedirectResolver: browserPopupRedirectResolver,
+  });
+  _auth.languageCode = 'hi';
   return _auth;
 }
