@@ -4,6 +4,7 @@
 
 import {
   GoogleAuthProvider,
+  getRedirectResult,
   signInWithRedirect,
   signOut,
   onAuthStateChanged,
@@ -25,9 +26,25 @@ export async function signInWithGoogle(): Promise<string | null> {
 
   try {
     const provider = new GoogleAuthProvider();
-    // Prompt the user to select their account
     provider.setCustomParameters({ prompt: 'select_account' });
     await signInWithRedirect(auth, provider);
+    return null;
+  } catch (err: unknown) {
+    return friendlyError(err);
+  }
+}
+
+/**
+ * Complete the redirect flow after Firebase returns to the app.
+ * Redirect sign-in can restore currentUser asynchronously, so the caller
+ * should still keep watchAuth() active as the final session signal.
+ */
+export async function finishGoogleRedirect(): Promise<string | null> {
+  const auth = getFirebaseAuth();
+  if (!auth) return 'Sign-in is not configured on this build.';
+
+  try {
+    await getRedirectResult(auth);
     return null;
   } catch (err: unknown) {
     return friendlyError(err);
@@ -85,6 +102,12 @@ function friendlyError(err: unknown): string {
       return 'Sign-in request was cancelled. Try again.';
     case 'auth/network-request-failed':
       return 'No internet connection. Check your network.';
+    case 'auth/unauthorized-domain':
+      return 'This website is not authorized for Google sign-in. Add fasal-kavach.web.app to Firebase Authentication authorized domains.';
+    case 'auth/operation-not-allowed':
+      return 'Google sign-in is disabled in Firebase Authentication.';
+    case 'auth/api-key-not-valid':
+      return 'The Firebase web API key is invalid for this build. Rebuild the site with the current Firebase web configuration.';
     default:
       return (err as Error)?.message || 'Something went wrong. Try again.';
   }
