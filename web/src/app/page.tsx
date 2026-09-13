@@ -3,13 +3,14 @@
  * Landing — pick a language, then sign in.
  *
  * Flow: language -> login -> (existing farm ? farm : onboarding).
- * localStorage caches the choice; the source of truth for which farm
- * belongs to you is GET /api/v1/me/farms, keyed on the account.
+ * localStorage caches the language choice only. The source of truth for which
+ * farm belongs to the signed-in account is GET /api/v1/me/farms.
  */
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "@/lib/i18n";
-import { watchAuth, DEMO_MODE } from "@/lib/auth";
+import { watchAuth, DEMO_MODE, getToken } from "@/lib/auth";
+import { api, ApiError } from "@/lib/api";
 import { IconShield } from "@/components/Icons";
 
 const LANGS: [Lang, string, string][] = [
@@ -23,25 +24,57 @@ export default function HomePage() {
   const router = useRouter();
   const [lang, setLang] = useState<Lang>("hi");
   const [checking, setChecking] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const storedLang = localStorage.getItem("fk_lang") as Lang | null;
     if (storedLang) setLang(storedLang);
 
-    // Firebase restores the session asynchronously. Waiting for it before
-    // deciding avoids flashing the language picker at a signed-in user.
-    const unsub = watchAuth((user) => {
-      const storedFarm = localStorage.getItem("fk_farm_id");
-      const inDemo = localStorage.getItem("fk_demo") === "true";
+    // Firebase restores the session asynchronously. Once a user exists, do
+    // not trust fk_farm_id: verify farm ownership through the authenticated API.
+    const unsub = watchAuth(async (user) => {
+      if (user) {
+        try {
+          const token = await getToken();
+          if (!token) {
+            throw new Error("The Firebase session could not be restored. Please sign in again.");
+          }
 
-      if (user || (inDemo && DEMO_MODE)) {
-        router.replace(storedFarm ? `/farm/${storedFarm}` : "/onboarding");
+          const mine = await api.myFarms();
+          localStorage.removeItem("fk_demo");
+
+          if (mine.count > 0) {
+            localStorage.setItem("fk_farm_id", mine.farms[0].farm_id);
+            router.replace(`/farm/${mine.farms[0].farm_id}`);
+          } else {
+            localStorage.removeItem("fk_farm_id");
+            router.replace("/onboarding");
+          }
+        } catch (err: unknown) {
+          setError(
+            err instanceof ApiError
+              ? err.message || "The server could not verify your farm."
+              : err instanceof Error
+                ? err.message
+                : "The account could not be verified."
+          );
+          setChecking(false);
+        }
         return;
       }
+
+      const inDemo = localStorage.getItem("fk_demo") === "true";
+      if (inDemo && DEMO_MODE) {
+        const demoFarm = localStorage.getItem("fk_farm_id") || "f_demo_01";
+        router.replace(`/farm/${demoFarm}`);
+        return;
+      }
+
       if (storedLang) {
         router.replace("/login");
         return;
       }
+
       setChecking(false);
     });
 
@@ -59,6 +92,24 @@ export default function HomePage() {
       <main className="shell" style={{ display: "grid", placeItems: "center" }}>
         <div style={{ color: "var(--paddy)", opacity: 0.5 }}>
           <IconShield size={38} />
+        </div>
+      </main>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="shell" style={{ display: "grid", placeItems: "center" }}>
+        <div className="sheet" style={{ maxWidth: 520 }}>
+          <div role="alert" className="notice notice--error" style={{ marginBottom: "var(--sp-4)" }}>
+            {error}
+          </div>
+          <button
+            className="btn btn--outline btn--block"
+            onClick={() => router.push("/login")}
+          >
+            Back to sign in
+          </button>
         </div>
       </main>
     );
