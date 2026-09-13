@@ -4,8 +4,7 @@
 
 import {
   GoogleAuthProvider,
-  getRedirectResult,
-  signInWithRedirect,
+  signInWithPopup,
   signOut,
   onAuthStateChanged,
   type User,
@@ -19,7 +18,7 @@ export function canSignIn(): boolean {
   return isFirebaseConfigured();
 }
 
-/** Step 1: Sign in with Google. Returns a friendly error string, or null on success. */
+/** Sign in with Google using a popup. Returns a friendly error string, or null on success. */
 export async function signInWithGoogle(): Promise<string | null> {
   const auth = getFirebaseAuth();
   if (!auth) return 'Sign-in is not configured on this build.';
@@ -27,24 +26,7 @@ export async function signInWithGoogle(): Promise<string | null> {
   try {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
-    await signInWithRedirect(auth, provider);
-    return null;
-  } catch (err: unknown) {
-    return friendlyError(err);
-  }
-}
-
-/**
- * Complete the redirect flow after Firebase returns to the app.
- * Redirect sign-in can restore currentUser asynchronously, so the caller
- * should still keep watchAuth() active as the final session signal.
- */
-export async function finishGoogleRedirect(): Promise<string | null> {
-  const auth = getFirebaseAuth();
-  if (!auth) return 'Sign-in is not configured on this build.';
-
-  try {
-    await getRedirectResult(auth);
+    await signInWithPopup(auth, provider);
     return null;
   } catch (err: unknown) {
     return friendlyError(err);
@@ -98,6 +80,8 @@ function friendlyError(err: unknown): string {
   switch (code) {
     case 'auth/popup-closed-by-user':
       return 'The sign-in popup was closed before completion.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the Google sign-in popup. Allow popups for fasal-kavach.web.app and try again.';
     case 'auth/cancelled-popup-request':
       return 'Sign-in request was cancelled. Try again.';
     case 'auth/network-request-failed':
