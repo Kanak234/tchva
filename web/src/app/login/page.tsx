@@ -2,7 +2,7 @@
 /**
  * Login — Google Sign-In, with a demo farm as the escape hatch.
  */
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "@/lib/i18n";
 import { signInWithGoogle, canSignIn, watchAuth, DEMO_MODE } from "@/lib/auth";
@@ -14,6 +14,7 @@ export default function LoginPage() {
   const [lang, setLang] = useState<Lang>("hi");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const navigatingRef = useRef(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("fk_lang") as Lang | null;
@@ -25,6 +26,9 @@ export default function LoginPage() {
    * localStorage is a cache, not a source of truth.
    */
   const routeAfterSignIn = useCallback(async () => {
+    if (navigatingRef.current) return;
+    navigatingRef.current = true;
+
     try {
       const mine = await api.myFarms();
       if (mine.count > 0) {
@@ -38,8 +42,9 @@ export default function LoginPage() {
     router.replace("/onboarding");
   }, [router]);
 
-  // Firebase restores an existing session asynchronously on page load.
-  // After popup sign-in, this observer is also the final session signal.
+  // Firebase restores an existing session asynchronously. The navigation lock
+  // prevents an auth-state callback and the explicit sign-in completion path
+  // from both trying to navigate at the same time.
   useEffect(() => {
     const unsubscribe = watchAuth(async (user) => {
       if (user) {
@@ -52,13 +57,21 @@ export default function LoginPage() {
   }, [routeAfterSignIn]);
 
   async function handleGoogleSignIn() {
+    if (busy || navigatingRef.current) return;
     setBusy(true);
     setError("");
+
     const err = await signInWithGoogle();
     if (err) {
       setBusy(false);
       setError(err);
+      return;
     }
+
+    // Do not wait for a second auth-state callback to decide the next page.
+    // signInWithPopup has already completed successfully, so route immediately.
+    setBusy(false);
+    await routeAfterSignIn();
   }
 
   function useDemoAccount() {
@@ -125,7 +138,7 @@ export default function LoginPage() {
         <button
           className="btn btn--block"
           onClick={handleGoogleSignIn}
-          disabled={!configured || busy}
+          disabled={!configured || busy || navigatingRef.current}
           style={{
             background: "var(--card)",
             borderColor: "var(--rule)",
