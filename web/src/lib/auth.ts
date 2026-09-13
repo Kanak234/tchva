@@ -27,6 +27,11 @@ export async function signInWithGoogle(): Promise<string | null> {
     const provider = new GoogleAuthProvider();
     provider.setCustomParameters({ prompt: 'select_account' });
     await signInWithPopup(auth, provider);
+
+    // A real Google session must never inherit a previously selected demo farm.
+    localStorage.removeItem('fk_demo');
+    localStorage.removeItem('fk_farm_id');
+
     return null;
   } catch (err: unknown) {
     return friendlyError(err);
@@ -35,13 +40,31 @@ export async function signInWithGoogle(): Promise<string | null> {
 
 /**
  * The token for the next API call, or null when signed out.
- * api.ts calls this before every request.
+ * On a fresh page load Firebase restores the user asynchronously, so wait for
+ * that first auth-state result instead of treating currentUser === null as
+ * proof that the user is signed out.
  */
 export async function getToken(): Promise<string | null> {
   const auth = getFirebaseAuth();
-  if (!auth?.currentUser) return null;
+  if (!auth) return null;
+
+  let user = auth.currentUser;
+  if (!user) {
+    user = await new Promise<User | null>((resolve) => {
+      let settled = false;
+      const unsubscribe = onAuthStateChanged(auth, (nextUser) => {
+        if (settled) return;
+        settled = true;
+        unsubscribe();
+        resolve(nextUser);
+      });
+    });
+  }
+
+  if (!user) return null;
+
   try {
-    return await auth.currentUser.getIdToken();
+    return await user.getIdToken();
   } catch {
     return null;
   }
