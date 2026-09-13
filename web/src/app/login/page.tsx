@@ -5,8 +5,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { t, type Lang } from "@/lib/i18n";
-import { signInWithGoogle, canSignIn, watchAuth, DEMO_MODE } from "@/lib/auth";
-import { api } from "@/lib/api";
+import { signInWithGoogle, canSignIn, watchAuth, getToken, DEMO_MODE } from "@/lib/auth";
+import { api, ApiError } from "@/lib/api";
 import { IconShield, IconGoogle, IconArrowLeft } from "@/components/Icons";
 
 export default function LoginPage() {
@@ -22,24 +22,47 @@ export default function LoginPage() {
   }, []);
 
   /**
-   * After sign-in, ask the API which farms this account owns.
-   * localStorage is a cache, not a source of truth.
+   * After sign-in, verify that Firebase still has a usable ID token before
+   * asking the API which farms this account owns. A backend/API failure is
+   * an authentication/network error, not evidence that the user has no farm.
    */
   const routeAfterSignIn = useCallback(async () => {
     if (navigatingRef.current) return;
     navigatingRef.current = true;
+    setBusy(true);
+    setError("");
 
     try {
+      const token = await getToken();
+      if (!token) {
+        throw new Error("Google sign-in completed, but the Firebase session is not ready. Please try again.");
+      }
+
       const mine = await api.myFarms();
       if (mine.count > 0) {
         localStorage.setItem("fk_farm_id", mine.farms[0].farm_id);
         router.replace(`/farm/${mine.farms[0].farm_id}`);
         return;
       }
-    } catch {
-      /* no farms on record — send them to set one up */
+
+      router.replace("/onboarding");
+    } catch (err: unknown) {
+      // Never convert an API/auth failure into "no farms". Doing so can send
+      // an authenticated user into onboarding and hide the real failure.
+      navigatingRef.current = false;
+      setBusy(false);
+
+      if (err instanceof ApiError) {
+        if (err.code === "UNAUTHENTICATED") {
+          setError("Google sign-in succeeded, but the backend rejected the Firebase session. Please sign in again.");
+          return;
+        }
+        setError(err.message || "The server could not load your farms. Please try again.");
+        return;
+      }
+
+      setError(err instanceof Error ? err.message : "Could not finish sign-in. Please try again.");
     }
-    router.replace("/onboarding");
   }, [router]);
 
   // Firebase restores an existing session asynchronously. The navigation lock
@@ -48,7 +71,6 @@ export default function LoginPage() {
   useEffect(() => {
     const unsubscribe = watchAuth(async (user) => {
       if (user) {
-        setBusy(false);
         await routeAfterSignIn();
       }
     });
@@ -68,9 +90,8 @@ export default function LoginPage() {
       return;
     }
 
-    // Do not wait for a second auth-state callback to decide the next page.
-    // signInWithPopup has already completed successfully, so route immediately.
-    setBusy(false);
+    // signInWithPopup has completed successfully. Route through the same
+    // token-validated path; the auth-state callback is safely deduplicated.
     await routeAfterSignIn();
   }
 
